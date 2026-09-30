@@ -1,0 +1,186 @@
+"""One local brief. Push writes Grok instructions only, and only after confirmation."""
+
+from __future__ import annotations
+
+import difflib
+from pathlib import Path
+
+from trinity_cli.app import call
+from trinity_cli.model import OK, UNSUPPORTED, InstructionText
+from trinity_cli.shown import Shown
+from trinity_cli.state import Ledger
+from trinity_cli.util import iso, now_utc
+
+_LIMIT = 32000
+_YES = {"y", "yes", "是"}
+
+
+def _read(path: Path) -> tuple[str | None, str | None]:
+    try:
+        return path.read_text(encoding="utf-8"), None
+    except FileNotFoundError:
+        return None, "missing"
+    except OSError as exc:
+        return None, str(exc)
+
+
+def _as_list(value: object) -> list[InstructionText]:
+    if isinstance(value, InstructionText):
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, InstructionText)]
+    return []
+
+
+def _confirmed(yes: bool, stdin) -> bool:
+    if yes:
+        return True
+    if not getattr(stdin, "isatty", lambda: False)():
+        return False
+    try:
+        return stdin.readline().strip().lower() in _YES
+    except (OSError, ValueError):
+        return False
+
+
+def _draft(label: str, reason: str, text: str) -> str:
+    return f"{label}：{reason}下面是可以自己貼上的草稿，沒有送出：\n---\n{text.rstrip()}\n---"
+
+
+def _diff(current: str, wanted: str) -> str:
+    if current.strip() == wanted.strip():
+        return "相同"
+    lines = list(
+        difflib.unified_diff(current.splitlines(), wanted.splitlines(), fromfile="seat", tofile="brief.md", lineterm="")
+    )
+    return "\n".join(lines[:80]) if lines else "相同"
+
+
+def _target_for(seat, grok_bot: str | None) -> str | None:
+    if seat.key != "grok":
+        return None
+    return grok_bot or getattr(seat, "default_bot", None)
+
+
+def run_show(path: Path) -> Shown:
+    text, error = _read(path)
+    if error == "missing":
+        return Shown(0, f"還沒有 brief：{path}", {"path": str(path), "missing": True})
+    if error:
+        return Shown(1, f"讀不到 brief：{error}", {"path": str(path), "error": error})
+    return Shown(0, f"{path}\n\n{text.rstrip()}", {"path": str(path), "text": text})
+
+
+def run_diff(seats, path: Path, *, grok_bot: str | None = None) -> Shown:
+    text, error = _read(path)
+    if error == "missing":
+        return Shown(2, f"還沒有 brief，無法比較：{path}", {"path": str(path), "missing": True})
+    if error:
+        return Shown(1, f"讀不到 brief：{error}", {"path": str(path), "error": error})
+    lines = [str(path), ""]
+    rows = []
+    failed = False
+    for seat in seats:
+        target = _target_for(seat, grok_bot)
+        if not seat.supports("instructions"):
+            lines.append(f"{seat.label}：沒有指令 API，無法比對")
+            rows.append({"seat": seat.key, "state": "unsupported", "error": "沒有指令 API"})
+            continue
+        result = call(seat, "instructions", target)
+        if result.state != OK:
+            if result.state != UNSUPPORTED:
+                failed = True
+            lines.append(f"{seat.label}：{result.error}")
+            rows.append({"seat": seat.key, "state": result.state, "error": result.error})
+            continue
+        for item in _as_list(result.value):
+            lines.append(f"{seat.label}/{item.target or seat.label}：")
+            lines.append(_diff(item.text, text))
+            rows.append({"seat": seat.key, "target": item.target, "state": "ok", "same": item.text.strip() == text.strip()})
+        if not _as_list(result.value):
+            lines.append(f"{seat.label}：讀不到目前的指令")
+            rows.append({"seat": seat.key, "state": "ok", "same": False})
+        lines.append("")
+    return Shown(1 if failed else 0, "\n".join(lines).rstrip(), {"path": str(path), "seats": rows})
+
+
+def run_push(
+    seats,
+    path: Path,
+    *,
+    yes: bool = False,
+    grok_bot: str | None = None,
+    ledger: Ledger | None = None,
+    stdin=None,
+    now=now_utc,
+) -> Shown:
+    text, error = _read(path)
+    if error == "missing" or text is None:
+        return Shown(2, f"還沒有 brief，沒有寫入：{path}", {"path": str(path), "updated": [], "sent": False})
+    if error:
+        return Shown(1, f"讀不到 brief：{error}", {"path": str(path), "updated": [], "sent": False})
+    if not text.strip():
+        return Shown(2, f"brief 是空的，沒有寫入：{path}", {"path": str(path), "updated": [], "sent": False})
+    if len(text) > _LIMIT:
+        return Shown(2, f"brief 超過 {_LIMIT} 字，沒有寫入。", {"path": str(path), "updated": [], "sent": False})
+    drafts: list[str] = []
+    writable: list[tuple] = []
+    failures: list[str] = []
+    for seat in seats:
+        target = _target_for(seat, grok_bot)
+        if not seat.supports("instructions"):
+            drafts.append(_draft(seat.label, "沒有指令 API。", text))
+            continue
+        result = call(seat, "instructions", target)
+        if result.state == UNSUPPORTED:
+            drafts.append(_draft(seat.label, result.error + "。", text))
+            continue
+        if result.state != OK:
+            failures.append(f"{seat.label}：{result.error}" + (f" → {result.hint}" if result.hint else ""))
+            continue
+        items = _as_list(result.value)
+        writers = [item for item in items if item.writable]
+        if not writers:
+            drafts.append(_draft(seat.label, "讀得到指令，但不能寫回。", text))
+            continue
+        if len(writers) != 1:
+            failures.append(f"{seat.label} 有多個 bot，沒有寫入。請用 --grok-bot 指定一個。")
+            continue
+        writable.append((seat, writers[0].target))
+    blocks = list(drafts)
+    if failures:
+        blocks.extend(failures)
+    if not writable:
+        blocks.append("沒有可以寫入指令的座位，沒有送出。")
+        return Shown(1 if failures else 0, "\n\n".join(blocks), {"path": str(path), "updated": [], "sent": False, "confirmed": False})
+    names = "、".join(f"{seat.label}/{target}" for seat, target in writable)
+    blocks.append(f"將寫入 {names} 的指令（只走該座位的指令 API，不會傳訊息）。")
+    blocks.append(f"---\n{text.rstrip()}\n---")
+    if not _confirmed(yes, stdin):
+        blocks.append("沒有確認，沒有寫入。要寫入請加上 --yes。")
+        return Shown(2, "\n\n".join(blocks), {"path": str(path), "updated": [], "sent": False, "confirmed": False})
+    book = ledger or Ledger()
+    updated = []
+    failed = bool(failures)
+    for seat, target in writable:
+        book.append({"event": "brief_push", "seat": seat.key, "target": target, "status": "writing", "at": iso(now())})
+        result = call(seat, "instructions", target, update=text)
+        status = "updated" if result.state == OK else "failed"
+        book.append(
+            {
+                "event": "brief_push",
+                "seat": seat.key,
+                "target": target,
+                "status": status,
+                "error": result.error,
+                "at": iso(now()),
+            }
+        )
+        if result.state == OK:
+            updated.append({"seat": seat.key, "target": target})
+            blocks.append(f"已寫入 {seat.label}/{target} 的指令。")
+        else:
+            failed = True
+            blocks.append(f"✗ {seat.label}/{target} 沒有寫入：{result.error}" + (f" → {result.hint}" if result.hint else ""))
+    blocks.append("沒有傳訊息給任何座位。")
+    return Shown(1 if failed else 0, "\n\n".join(blocks), {"path": str(path), "updated": updated, "sent": False, "confirmed": True})

@@ -67,13 +67,38 @@ class NoSecretsInOutputTests(unittest.TestCase):
         ]
 
     def run_all(self, dot_world, grok_world):
+        brief = Path(self.tmp.name) / "brief.md"
+        brief.write_text("standing orders\n", encoding="utf-8")
         texts = []
-        for argv in (["status"], ["--json", "status"], ["digest", "--peek"], ["--json", "digest", "--peek"],
-                     ["ask", "all", "hi", "--grok-bot", "蝴蝶", "--timeout", "0"],
-                     ["--json", "ask", "all", "hi", "--grok-bot", "蝴蝶", "--timeout", "0"]):
+        commands = (
+            ["status"],
+            ["--json", "status"],
+            ["digest", "--peek"],
+            ["--json", "digest", "--peek"],
+            ["ask", "all", "hi", "--grok-bot", "蝴蝶", "--timeout", "0"],
+            ["--json", "ask", "all", "hi", "--grok-bot", "蝴蝶", "--timeout", "0"],
+            ["schedules"],
+            ["--json", "schedules"],
+            ["who", "翻譯這段"],
+            ["log"],
+            ["brief", "show"],
+            ["brief", "diff"],
+            ["brief", "push"],
+            ["hand", "dot#last", "--to", "grok:蝴蝶", "看一下"],
+            ["wait", "dot", "--timeout", "0"],
+        )
+        for argv in commands:
             out = io.StringIO()
-            main(argv, seats=self.seats(dot_world, grok_world), out=out, err=io.StringIO(),
-                 state=self.state, ledger=self.ledger, stdin=io.StringIO(""))
+            main(
+                argv,
+                seats=self.seats(dot_world, grok_world),
+                out=out,
+                err=io.StringIO(),
+                state=self.state,
+                ledger=self.ledger,
+                stdin=io.StringIO(""),
+                brief_path=brief,
+            )
             texts.append(out.getvalue())
         return "\n".join(texts)
 
