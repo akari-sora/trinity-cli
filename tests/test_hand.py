@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tests.fakes import FAKE_JWT, Clock, DotWorld, FakeRunner, FakeSeat, GrokWorld, dot_message
+from tests.fakes import FAKE_JWT, Clock, DotWorld, FakeRunner, FakeSeat, GrokWorld, MuseWorld, dot_message, unsupported_muse
 from trinity_cli.cli import main
 from trinity_cli.model import OK, Batch, Message, ReadOutcome, Result, SendReceipt, WaitOutcome
 from trinity_cli.seats import DotSeat, GrokSeat, MuseSeat
@@ -45,7 +45,7 @@ class HandTests(unittest.TestCase):
     def test_confirmation_is_required_without_yes(self):
         dest = FakeSeat("grok", "Grok Bot", send=Result.ok(SendReceipt("Grok Bot/蝴蝶", "蝴蝶", "n", datetime.now(timezone.utc), "accepted")))
         code, text, _ = self.invoke(
-            [FakeSeat("dot", "Your dot", read=messages(agent("來源回覆"))), dest, MuseSeat()],
+            [FakeSeat("dot", "Your dot", read=messages(agent("來源回覆"))), dest, unsupported_muse()],
             "hand", "dot#last", "--to", "grok:蝴蝶", "請看這則",
         )
         self.assertEqual(code, 2)
@@ -107,14 +107,17 @@ class HandTests(unittest.TestCase):
         self.assertEqual(dest.send_calls, 1)
         self.assertIn("沒有重送", text)
 
-    def test_muse_is_not_a_destination_send(self):
+    def test_unsupported_muse_send_does_not_wait_or_resend(self):
         origin = FakeSeat("dot", "Your dot", read=messages(agent("來源回覆")))
-        code, text, _ = self.invoke([origin, MuseSeat()], "hand", "dot#last", "--to", "muse", "--yes", "請看")
+        world = MuseWorld(unsupported=True)
+        muse = MuseSeat(FakeRunner(world), binary="muse-web-cli")
+        code, text, _ = self.invoke([origin, muse], "hand", "dot#last", "--to", "muse", "--yes", "請看")
         self.assertEqual(code, 0)
         self.assertIn("不支援", text)
-        self.assertIn("沒有送出", text)
         self.assertEqual(origin.send_calls, 0)
-        self.assertEqual(self.ledger.records(), [])
+        self.assertEqual([call[0] for call in world.calls], ["send"])
+        self.assertNotIn("--wait", [part for call in muse.runner.calls for part in call["argv"]])
+        self.assertEqual([row["event"] for row in self.ledger.records()], ["sending", "unsupported"])
 
     def test_real_seats_append_nonce_and_do_not_move_cursors(self):
         self.state.save_cursors({"dot.messages": {"id": "keep-me", "at": "2026-10-01T00:00:00+00:00"}})
@@ -123,7 +126,7 @@ class HandTests(unittest.TestCase):
         clock = Clock()
         dot = DotSeat(FakeRunner(dot_world), binary="chatgpt-dot-cli", hostnames=set(), clock=clock, sleep=clock.sleep)
         grok = GrokSeat(FakeRunner(grok_world), binary="/fake/bin/gbot", only_bots=[], clock=clock, sleep=clock.sleep)
-        code, text, _ = self.invoke([dot, grok, MuseSeat()], "hand", "dot#last", "--to", "grok:蝴蝶", "--yes", "--timeout", "0", "請處理")
+        code, text, _ = self.invoke([dot, grok, unsupported_muse()], "hand", "dot#last", "--to", "grok:蝴蝶", "--yes", "--timeout", "0", "請處理")
         self.assertEqual(code, 1)
         self.assertEqual(len(grok_world.sent), 1)
         self.assertEqual(dot.runner.commands().count("send"), 0)

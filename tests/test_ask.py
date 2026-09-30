@@ -13,12 +13,13 @@ from tests.fakes import (
     FakeSeat,
     GrokWorld,
     dot_message,
+    unsupported_muse,
     fail,
     grok_entry,
 )
 from trinity_cli.cli import main
 from trinity_cli.model import Message, Result, SendReceipt, WaitOutcome
-from trinity_cli.seats import DotSeat, GrokSeat, MuseSeat
+from trinity_cli.seats import DotSeat, GrokSeat
 from trinity_cli.state import Ledger
 from trinity_cli.util import has_nonce, nonce_tag
 
@@ -117,11 +118,11 @@ class AskFlowTests(AskTestCase):
 
         dot_seat.runner = FakeRunner(dot_handler)
         grok_seat.runner = FakeRunner(grok_handler)
-        code, text = self.ask([dot_seat, grok_seat, MuseSeat()], "all", "今天進度？", "--grok-bot", "蝴蝶")
+        code, text = self.ask([dot_seat, grok_seat, unsupported_muse()], "all", "今天進度？", "--grok-bot", "蝴蝶")
         self.assertEqual(code, 0)
         self.assertIn("dot 的回答", text)
         self.assertIn("蝴蝶的回答", text)
-        self.assertIn("不支援（沒有公開 API）", text)
+        self.assertIn("不支援", text)
         self.assertIn(" │ ", text)
         self.assertEqual(len(dot_world.sent), 1)
         self.assertEqual(len(grok_world.sent), 1)
@@ -170,16 +171,16 @@ class AskFlowTests(AskTestCase):
         bots = [{"id": BOT_ID, "name": "蝴蝶", "kind": "bot"}, {"id": "b2", "name": "Two", "kind": "bot"}]
         world = GrokWorld(bots=bots)
         seat = self.grok(world)
-        code, text = self.ask([seat, MuseSeat()], "all", "hi")
+        code, text = self.ask([seat, unsupported_muse()], "all", "hi")
         self.assertEqual(code, 1)
         self.assertEqual(world.sent, [])
         self.assertIn("ask grok <bot>", text)
 
     def test_ask_muse_is_unsupported_not_failed(self):
-        code, text = self.ask([MuseSeat()], "muse", "hi")
+        code, text = self.ask([unsupported_muse()], "muse", "hi")
         self.assertEqual(code, 0)
-        self.assertIn("不支援（沒有公開 API）", text)
-        self.assertEqual(self.ledger.records(), [])
+        self.assertIn("不支援", text)
+        self.assertEqual([row["event"] for row in self.ledger.records()], ["sending", "unsupported"])
 
     def test_json_output(self):
         receipt = SendReceipt("Fake", "", "n", datetime.now(timezone.utc), "accepted")
@@ -191,7 +192,7 @@ class AskFlowTests(AskTestCase):
         self.assertEqual(data["results"][0]["readback"], "confirmed")
 
     def test_empty_text_is_rejected(self):
-        code, _ = self.ask([MuseSeat()], "all")
+        code, _ = self.ask([unsupported_muse()], "all")
         self.assertEqual(code, 2)
 
 

@@ -16,10 +16,11 @@ from tests.fakes import (
     dot_message,
     fail,
     grok_entry,
+    unsupported_muse,
 )
 from trinity_cli.cli import main
 from trinity_cli.redact import scrub, scrub_ids
-from trinity_cli.seats import DotSeat, GrokSeat, MuseSeat
+from trinity_cli.seats import DotSeat, GrokSeat
 from trinity_cli.state import Ledger, State
 
 TOKEN_LIKE = re.compile(
@@ -63,7 +64,7 @@ class NoSecretsInOutputTests(unittest.TestCase):
         return [
             DotSeat(FakeRunner(dot_world), binary="chatgpt-dot-cli", hostnames=set(), clock=self.clock, sleep=self.clock.sleep),
             GrokSeat(FakeRunner(grok_world), binary="/fake/bin/gbot", only_bots=[], clock=self.clock, sleep=self.clock.sleep),
-            MuseSeat(),
+            unsupported_muse(),
         ]
 
     def run_all(self, dot_world, grok_world):

@@ -12,10 +12,11 @@ from tests.fakes import (
     grok_entry,
     ok,
     BOT_ID,
+    unsupported_muse,
 )
 from trinity_cli.cli import main
 from trinity_cli.model import Result, SeatStatus
-from trinity_cli.seats import DotSeat, GrokSeat, MuseSeat
+from trinity_cli.seats import DotSeat, GrokSeat
 
 
 def run(seats, *argv):
@@ -35,15 +36,15 @@ def grok_seat(world):
 class StatusCommandTests(unittest.TestCase):
     def test_unsupported_seat_does_not_fail_status(self):
         good = FakeSeat("a", "Alpha", status=Result.ok(SeatStatus("運作中")))
-        code, text = run([good, MuseSeat()], "status")
+        code, text = run([good, unsupported_muse()], "status")
         self.assertEqual(code, 0)
         self.assertIn("Muse", text)
-        self.assertIn("不支援（沒有公開 API）", text)
+        self.assertIn("不支援", text)
         self.assertNotIn("✗", text)
 
     def test_unsupported_seat_in_json(self):
         good = FakeSeat("a", "Alpha", status=Result.ok(SeatStatus("運作中")))
-        code, text = run([good, MuseSeat()], "--json", "status")
+        code, text = run([good, unsupported_muse()], "--json", "status")
         data = json.loads(text)
         self.assertEqual(code, 0)
         self.assertEqual([s["state"] for s in data["seats"]], ["ok", "unsupported"])
@@ -51,7 +52,7 @@ class StatusCommandTests(unittest.TestCase):
     def test_failing_seat_is_shown_as_failure_with_its_hint(self):
         bad = FakeSeat("b", "Beta", status=Result.failed("連不上", "去修它"))
         good = FakeSeat("a", "Alpha", status=Result.ok(SeatStatus("運作中")))
-        code, text = run([good, bad, MuseSeat()], "status")
+        code, text = run([good, bad, unsupported_muse()], "status")
         self.assertEqual(code, 1)
         line = next(l for l in text.splitlines() if l.startswith("Beta"))
         self.assertIn("✗ 失敗：連不上", line)
@@ -70,7 +71,7 @@ class StatusCommandTests(unittest.TestCase):
 
     def test_waiting_items_are_printed_first(self):
         seat = FakeSeat("a", "Alpha", status=Result.ok(SeatStatus("運作中", waiting=["Alpha 在等你"])))
-        code, text = run([MuseSeat(), seat], "status")
+        code, text = run([unsupported_muse(), seat], "status")
         self.assertEqual(text.splitlines()[0], "等你處理：")
         self.assertIn("Alpha 在等你", text.splitlines()[1])
 
@@ -163,7 +164,7 @@ class GrokStatusTests(unittest.TestCase):
         dot = dot_seat(DotWorld(messages=[dot_message(1, "dot", "ok", "2026-10-01T02:00:00Z")]))
         grok_world = GrokWorld()
         grok_world.overrides["bots"] = fail(1, "gateway error for agent 0b0e7a8c-1111-4222-8333-444455556666")
-        code, text = run([dot, grok_seat(grok_world), MuseSeat()], "status")
+        code, text = run([dot, grok_seat(grok_world), unsupported_muse()], "status")
         self.assertEqual(code, 1)
         self.assertIn("Grok Bot  ✗ 失敗", text)
         self.assertNotIn("0b0e7a8c", text)

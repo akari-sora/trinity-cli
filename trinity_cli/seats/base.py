@@ -1,12 +1,11 @@
-"""Every seat has the same capabilities: status, read, send, wait, schedules, instructions.
+"""Every seat has the same capabilities: status, read, send, wait, schedules, instructions, memory.
 
 A seat that cannot do something returns Result.unsupported(...). It never raises
 for that. Adding a seat means adding one file that subclasses Seat.
 
-Muse can later override schedules and instructions without a change here:
-schedules() -> Result.ok(list[ScheduleItem]); instructions(target, update=None)
--> Result.ok(InstructionText). Leave a method unimplemented and the command
-prints the unsupported reason instead of failing.
+Leave a method unimplemented and the command prints the unsupported reason
+instead of failing. memory() is read-only; brief diff uses it when a seat
+overrides it.
 """
 
 from __future__ import annotations
@@ -55,4 +54,8 @@ class Seat:
 
         An update on an unsupported seat is a no-op result: it must not send a message.
         """
+        return Result.unsupported(self.unsupported_reason)
+
+    def memory(self) -> Result:
+        """Read a seat's memory text. Never writes."""
         return Result.unsupported(self.unsupported_reason)

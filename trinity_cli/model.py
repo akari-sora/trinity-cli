@@ -9,7 +9,7 @@ OK = "ok"
 FAILED = "failed"
 UNSUPPORTED = "unsupported"
 
-CAPABILITIES = ("status", "read", "send", "wait", "schedules", "instructions")
+CAPABILITIES = ("status", "read", "send", "wait", "schedules", "instructions", "memory")
 
 
 @dataclass

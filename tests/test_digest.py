@@ -16,10 +16,11 @@ from tests.fakes import (
     dot_record,
     fail,
     grok_entry,
+    unsupported_muse,
 )
 from trinity_cli.cli import main
 from trinity_cli.model import Batch, Message, ReadOutcome, Result
-from trinity_cli.seats import DotSeat, GrokSeat, MuseSeat
+from trinity_cli.seats import DotSeat, GrokSeat
 from trinity_cli.state import State
 
 
@@ -73,10 +74,10 @@ class DigestCursorTests(unittest.TestCase):
     def test_failed_source_is_loud_and_keeps_its_cursor(self):
         self.state.save_cursors({"b.messages": {"id": "old"}})
         bad = FakeSeat("b", "Beta", read=Result.failed("讀不到", "修好它"))
-        code, text = self.digest([batch_seat(), bad, MuseSeat()])
+        code, text = self.digest([batch_seat(), bad, unsupported_muse()])
         self.assertEqual(code, 1)
         self.assertIn("✗ Beta 讀取失敗：讀不到 → 修好它（這不代表沒有新訊息）", text)
-        self.assertIn("– Muse：不支援（沒有公開 API）", text)
+        self.assertIn("– Muse：不支援", text)
         self.assertEqual(self.state.cursors()["b.messages"], {"id": "old"})
         self.assertEqual(self.state.cursors()["a.messages"], {"id": "m1"})
 
@@ -89,7 +90,7 @@ class DigestCursorTests(unittest.TestCase):
         self.assertIn("失敗的來源請看上面", text)
 
     def test_unsupported_only_is_not_a_failure(self):
-        code, text = self.digest([batch_seat(items=[], cursor={"id": "m0"}), MuseSeat()])
+        code, text = self.digest([batch_seat(items=[], cursor={"id": "m0"}), unsupported_muse()])
         self.assertEqual(code, 0)
         self.assertIn("沒有新訊息。", text)
 

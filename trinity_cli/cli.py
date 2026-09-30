@@ -36,7 +36,7 @@ from trinity_cli.util import new_nonce, one_line, parse_since
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="trinity-cli",
-        description="One command in front of your always-on agents: Your dot, Grok Bot, and Muse (placeholder).",
+        description="One command in front of your always-on agents: Your dot, Grok Bot, and Muse.",
         epilog=(
             "examples:\n"
             "  trinity-cli status\n"

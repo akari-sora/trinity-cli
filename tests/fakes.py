@@ -320,3 +320,161 @@ class GrokWorld:
             entries.append(grok_entry(f"e{len(entries) + 1000}", "user", stdin))
             return ok({"id": bot["id"], "name": bot["name"], "kind": "bot", "result": {"ok": True}})
         raise AssertionError(f"unexpected gbot command {args}")
+
+
+_MUSE_EXIT = {
+    "ok": 0,
+    "browser_down": 2,
+    "session_expired": 2,
+    "region_blocked": 2,
+    "profile_busy": 2,
+    "credential_permissions": 2,
+    "ui_changed": 3,
+    "timeout": 3,
+    "unsupported": 4,
+}
+_MUSE_ERROR = {
+    "browser_down": "browser is not available",
+    "session_expired": "登入工作階段已失效",
+    "region_blocked": "Muse 在這個地區無法使用",
+    "profile_busy": "profile is busy",
+    "credential_permissions": "credential file must be mode 600",
+    "ui_changed": "Muse 頁面結構對不上",
+    "timeout": "timed out waiting for the sent message to appear",
+    "unsupported": "不支援",
+}
+
+
+class MuseWorld:
+    """Shapes match muse-web-cli --json. This never starts a browser."""
+
+    def __init__(self, *, unsupported: bool = False):
+        self.unsupported = unsupported
+        self.force: dict[str, str] = {}
+        self.headless = True
+        self.backend = "browser"
+        self.pending_count = 0
+        self.card = False
+        self.pending_items: list[dict] = []
+        self.messages: list[dict] = []
+        self.groups: list[dict] = []
+        self.memory_text = ""
+        self.reply = ""
+        self.timeout_send = False
+        self.calls: list[list[str]] = []
+
+    def _state(self, command: str) -> str:
+        if self.unsupported:
+            return "unsupported"
+        return self.force.get(command, "ok")
+
+    def __call__(self, args, stdin):
+        items = [item for item in args if item != "--autostart"]
+        command = items[0]
+        rest = items[1:]
+        if rest[:1] == ["--"]:
+            rest = rest[1:]
+        self.calls.append([command, *rest])
+        if command == "send" and self.timeout_send:
+            return fail(124, "muse-web-cli timed out", timed_out=True)
+        state = self._state(command)
+        error = None if state == "ok" else _MUSE_ERROR.get(state, "不支援")
+        hint = "wrong hint" if state in {"session_expired", "browser_down"} else None
+        if command == "status":
+            return _muse_proc(
+                state,
+                {
+                    "backend": self.backend,
+                    "state": state,
+                    "pending": self.pending_count,
+                    "latest_assistant_is_card": self.card,
+                    "headless": self.headless,
+                    "error": error,
+                    "hint": hint,
+                    "missing": [],
+                    "ignored": FAKE_JWT,
+                },
+            )
+        if command == "messages":
+            rows = self.messages if state == "ok" else []
+            return _muse_proc(
+                state,
+                {
+                    "backend": self.backend,
+                    "state": state,
+                    "name": "Muse",
+                    "lines": [f"{row['role']}: {row['text']}" for row in rows],
+                    "messages": rows,
+                    "error": error,
+                    "hint": hint,
+                    "extra": FAKE_JWT,
+                },
+            )
+        if command == "send":
+            text = rest[-1] if rest else ""
+            attempted = state in {"ok", "timeout"}
+            sent = state == "ok"
+            if sent:
+                self.messages.append({"role": "user", "text": text, "presentation": False, "secret": FAKE_JWT})
+                if self.reply:
+                    self.messages.append({"role": "assistant", "text": self.reply, "presentation": False})
+            return _muse_proc(
+                state,
+                {
+                    "backend": self.backend,
+                    "state": state,
+                    "attempted": attempted,
+                    "sent": sent,
+                    "text": text,
+                    "reply": self.reply if sent and self.reply else None,
+                    "presentation": False,
+                    "elapsed_ms": 5,
+                    "error": error,
+                    "hint": "nothing was sent again" if state == "timeout" else hint,
+                },
+            )
+        if command == "pending":
+            items = self.pending_items if state == "ok" else []
+            return _muse_proc(
+                state,
+                {"backend": self.backend, "state": state, "count": len(items), "items": items, "error": error, "hint": hint},
+            )
+        if command == "upcoming":
+            groups = self.groups if state == "ok" else []
+            count = sum(len(group.get("items") or []) for group in groups)
+            return _muse_proc(
+                state,
+                {
+                    "backend": self.backend,
+                    "state": state,
+                    "count": count,
+                    "groups": groups,
+                    "error": error,
+                    "hint": hint,
+                },
+            )
+        if command == "memory":
+            body = self.memory_text if state == "ok" else ""
+            return _muse_proc(
+                state,
+                {
+                    "backend": self.backend,
+                    "state": state,
+                    "chars": len(body),
+                    "sections": [],
+                    "text": body,
+                    "error": error,
+                    "hint": hint,
+                },
+            )
+        raise AssertionError(f"unexpected muse-web-cli command {command}")
+
+
+def _muse_proc(state: str, payload: dict) -> Proc:
+    return Proc(_MUSE_EXIT.get(state, 3), json.dumps(payload), "")
+
+
+def unsupported_muse():
+    from trinity_cli.seats.muse import MuseSeat
+
+    return MuseSeat(FakeRunner(MuseWorld(unsupported=True)), binary="muse-web-cli")

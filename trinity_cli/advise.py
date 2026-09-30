@@ -29,12 +29,19 @@ _KEYWORDS = {
         ("grok", 3),
         ("問答", 2),
     ),
+    "muse": (
+        ("muse", 3),
+        ("記憶", 2),
+        ("待辦", 2),
+        ("行程", 2),
+        ("行事曆", 2),
+    ),
 }
 _MACHINE = ("本機", "mac", "檔案", "file", "電腦", "desktop", "下載", "資料夾")
 
 
 def _notes_for(key: str, task: str, result) -> tuple[int, list[str]]:
-    if key == "muse" or result.state == UNSUPPORTED:
+    if result.state == UNSUPPORTED:
         return -100, ["不支援"]
     folded = task.casefold()
     score = 0

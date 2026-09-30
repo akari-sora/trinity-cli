@@ -16,5 +16,5 @@ def build_seats(runner: Runner | None = None, *, grok_bot: str | None = None, in
     return [
         DotSeat(runner, include_activity=include_activity),
         GrokSeat(runner, default_bot=grok_bot),
-        MuseSeat(),
+        MuseSeat(runner),
     ]

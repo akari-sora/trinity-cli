@@ -6,7 +6,7 @@ import difflib
 from pathlib import Path
 
 from trinity_cli.app import call
-from trinity_cli.model import OK, UNSUPPORTED, InstructionText
+from trinity_cli.model import FAILED, OK, UNSUPPORTED, InstructionText
 from trinity_cli.shown import Shown
 from trinity_cli.state import Ledger
 from trinity_cli.util import iso, now_utc
@@ -81,6 +81,27 @@ def run_diff(seats, path: Path, *, grok_bot: str | None = None) -> Shown:
     rows = []
     failed = False
     for seat in seats:
+        if seat.supports("memory"):
+            result = call(seat, "memory")
+            if result.state == OK and isinstance(result.value, str):
+                lines.append(f"{seat.label} 記憶（只讀）：")
+                lines.append(_diff(result.value, text))
+                rows.append(
+                    {
+                        "seat": seat.key,
+                        "state": "ok",
+                        "memory": True,
+                        "same": result.value.strip() == text.strip(),
+                    }
+                )
+            elif result.state == FAILED:
+                failed = True
+                lines.append(f"{seat.label} 記憶：{result.error}" + (f" → {result.hint}" if result.hint else ""))
+                rows.append({"seat": seat.key, "state": result.state, "memory": True, "error": result.error})
+            else:
+                lines.append(f"{seat.label} 記憶：{result.error or '不支援'}")
+                rows.append({"seat": seat.key, "state": result.state, "memory": True, "error": result.error})
+            lines.append("")
         target = _target_for(seat, grok_bot)
         if not seat.supports("instructions"):
             lines.append(f"{seat.label}：沒有指令 API，無法比對")

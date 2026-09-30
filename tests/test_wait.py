@@ -5,10 +5,9 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tests.fakes import Clock, FakeSeat
+from tests.fakes import Clock, FakeSeat, unsupported_muse
 from trinity_cli.cli import main
 from trinity_cli.model import Batch, Message, ReadOutcome, Result, SendReceipt
-from trinity_cli.seats import MuseSeat
 from trinity_cli.state import Ledger
 
 
@@ -47,7 +46,7 @@ class WaitTests(unittest.TestCase):
     def test_timeout_never_sends_or_runs_then(self):
         seat = FakeSeat("dot", "Your dot", read=batch([msg("舊的", at="2026-10-01T01:00:00Z")]))
         code, text, err = self.invoke(
-            [seat, MuseSeat()],
+            [seat, unsupported_muse()],
             "wait", "dot", "--timeout", "20", "--poll", "5", "--then", "hand", "dot#last", "--to", "grok", "--yes", "接著",
         )
         self.assertEqual(code, 1)
@@ -129,7 +128,7 @@ class WaitTests(unittest.TestCase):
         self.assertIn("沒有重送", text)
 
     def test_unsupported_seat_does_not_fail(self):
-        code, text, _ = self.invoke([MuseSeat()], "wait", "muse", "--timeout", "0")
+        code, text, _ = self.invoke([unsupported_muse()], "wait", "muse", "--timeout", "0")
         self.assertEqual(code, 0)
         self.assertIn("不支援", text)
         self.assertEqual(self.ledger.records(), [])

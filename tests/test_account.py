@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.fakes import BOT_ID, DotWorld, FakeRunner, GrokWorld, dot_message
+from tests.fakes import BOT_ID, DotWorld, FakeRunner, GrokWorld, MuseWorld, dot_message
 from trinity_cli.config import clean_account, configured_gbot_account
 from trinity_cli.seats import DotSeat, GrokSeat, MuseSeat
 from trinity_cli.util import WINDOW_CURSOR
@@ -86,11 +86,17 @@ class AccountTests(unittest.TestCase):
                     os.environ["TRINITY_HOME"] = old_home
 
     def test_new_capabilities_default_to_unsupported(self):
-        muse = MuseSeat()
-        self.assertFalse(muse.supports("schedules"))
+        muse = MuseSeat(FakeRunner(MuseWorld(unsupported=True)), binary="muse-web-cli")
+        self.assertTrue(muse.supports("schedules"))
+        self.assertTrue(muse.supports("memory"))
         self.assertFalse(muse.supports("instructions"))
         self.assertEqual(muse.schedules().state, "unsupported")
+        self.assertEqual(muse.memory().state, "unsupported")
         self.assertEqual(muse.instructions(update="do not send").state, "unsupported")
+        missing = MuseSeat(FakeRunner(MuseWorld()), binary="")
+        self.assertEqual(missing.status().state, "failed")
+        self.assertIn("找不到 muse-web-cli", missing.status().error)
+        self.assertEqual(missing.runner.calls, [])
         dot = DotSeat(FakeRunner(DotWorld()), binary="chatgpt-dot-cli", hostnames=set())
         self.assertTrue(dot.supports("schedules"))
         self.assertFalse(dot.supports("instructions"))
