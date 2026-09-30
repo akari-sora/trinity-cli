@@ -9,7 +9,7 @@ OK = "ok"
 FAILED = "failed"
 UNSUPPORTED = "unsupported"
 
-CAPABILITIES = ("status", "read", "send", "wait")
+CAPABILITIES = ("status", "read", "send", "wait", "schedules", "instructions")
 
 
 @dataclass
@@ -94,3 +94,21 @@ class WaitOutcome:
     timed_out: bool
     polls: int = 0
     error: str = ""
+
+
+@dataclass
+class ScheduleItem:
+    """One automation. No ids: titles and times are enough to spot duplicates."""
+
+    title: str
+    when: str = ""
+    status: str = ""
+
+
+@dataclass
+class InstructionText:
+    """Standing instructions for one target. writable is false when the seat can be read but not updated."""
+
+    target: str
+    text: str
+    writable: bool = False

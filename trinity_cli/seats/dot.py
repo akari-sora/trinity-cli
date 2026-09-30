@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from trinity_cli.model import Batch, Message, ReadOutcome, Result, SeatStatus, SendReceipt, SourceFailure, WaitOutcome
+from trinity_cli.schedules import parse_schedules
 from trinity_cli.redact import short_error
 from trinity_cli.runner import Runner, find_tool
 from trinity_cli.seats.base import Problem, Seat
@@ -20,7 +21,7 @@ from trinity_cli.util import has_nonce, iso, local_stamp, now_utc, one_line, par
 MESSAGE_LIMIT = 30
 MESSAGE_LIMIT_MAX = 32
 FIRST_READ = 10
-PER_DOT = {"messages", "computers", "env", "activity", "send"}
+PER_DOT = {"messages", "computers", "env", "activity", "send", "automations"}
 FIX_LOGIN = "執行 `codex login` 後重試"
 FIX_INSTALL = "安裝 chatgpt-dot-cli（見 README）或設定 TRINITY_DOT_CLI"
 FIX_NETWORK = "檢查網路後重跑；單獨測試：`chatgpt-dot-cli list`"
@@ -330,6 +331,12 @@ class DotSeat(Seat):
                     window_delta("dot.activity", f"{name} 活動", items, cursors.get("dot.activity"), since, more, len(items))
                 )
         return Result.ok(outcome)
+
+    def schedules(self) -> Result:
+        payload, problem = self._try("automations", timeout=45)
+        if problem:
+            return Result.failed(problem.error, problem.hint)
+        return Result.ok(parse_schedules(payload))
 
     # --- send / wait ----------------------------------------------------
 

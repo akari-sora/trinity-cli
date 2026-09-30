@@ -1,7 +1,12 @@
-"""Every seat has the same four capabilities: status, read, send, wait.
+"""Every seat has the same capabilities: status, read, send, wait, schedules, instructions.
 
 A seat that cannot do something returns Result.unsupported(...). It never raises
 for that. Adding a seat means adding one file that subclasses Seat.
+
+Muse can later override schedules and instructions without a change here:
+schedules() -> Result.ok(list[ScheduleItem]); instructions(target, update=None)
+-> Result.ok(InstructionText). Leave a method unimplemented and the command
+prints the unsupported reason instead of failing.
 """
 
 from __future__ import annotations
@@ -40,4 +45,14 @@ class Seat:
         return Result.unsupported(self.unsupported_reason)
 
     def wait(self, receipt: SendReceipt, *, timeout: float, poll: float) -> Result:
+        return Result.unsupported(self.unsupported_reason)
+
+    def schedules(self) -> Result:
+        return Result.unsupported(self.unsupported_reason)
+
+    def instructions(self, target: str | None = None, *, update: str | None = None) -> Result:
+        """Read standing instructions, or replace them when update is not None.
+
+        An update on an unsupported seat is a no-op result: it must not send a message.
+        """
         return Result.unsupported(self.unsupported_reason)

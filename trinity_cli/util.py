@@ -8,6 +8,9 @@ from datetime import datetime, timedelta, timezone
 
 NONCE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 NONCE_LENGTH = 6
+# Passed as a cursor id so read() returns the current window. Never saved.
+WINDOW_CURSOR_ID = "trinity-window"
+WINDOW_CURSOR = {"id": WINDOW_CURSOR_ID, "at": "1970-01-01T00:00:00+00:00"}
 
 
 def now_utc() -> datetime:

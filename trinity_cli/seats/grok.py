@@ -8,18 +8,43 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from trinity_cli.model import Batch, Message, ReadOutcome, Result, SeatStatus, SendReceipt, SourceFailure, WaitOutcome
+from trinity_cli.config import clean_account, configured_gbot_account
+from trinity_cli.model import (
+    Batch,
+    InstructionText,
+    Message,
+    ReadOutcome,
+    Result,
+    SeatStatus,
+    SendReceipt,
+    SourceFailure,
+    WaitOutcome,
+)
 from trinity_cli.redact import short_error
 from trinity_cli.runner import Runner, env_with_tool_dir, find_tool
+from trinity_cli.schedules import parse_schedules
 from trinity_cli.seats.base import Problem, Seat
-from trinity_cli.util import has_nonce, iso, local_stamp, now_utc, one_line, parse_time, with_nonce
+from trinity_cli.util import (
+    WINDOW_CURSOR_ID,
+    has_nonce,
+    iso,
+    local_stamp,
+    now_utc,
+    one_line,
+    parse_time,
+    with_nonce,
+)
 
 TRANSCRIPT_LIMIT = 40
 FIRST_READ = 10
 GBOT_FALLBACKS = ("~/.nvm/versions/node/*/bin/gbot", "/opt/homebrew/bin/gbot", "/usr/local/bin/gbot")
 FIX_APP = "打開 Grok Bot app 確認已登入，再跑 `gbot doctor`"
 FIX_INSTALL = "安裝 gbot（見 README）或設定 TRINITY_GBOT"
-FIX_AMBIGUOUS = "打開 Grok Bot app，只保留一個登入（登出多餘的帳號或工作區），再跑 `gbot doctor` 確認 session usable"
+FIX_AMBIGUOUS = (
+    "設定 TRINITY_GBOT_ACCOUNT（或 ~/.trinity-cli/config.json 的 gbot_account）。"
+    "gbot 支援 --account 後 trinity 會帶過去；在那之前請打開 Grok Bot app，只留一個登入，再跑 `gbot doctor`"
+)
+_SCHEDULE_COMMANDS = ("schedules", "routines", "automations")
 # gbot fails with these before any gateway request, so nothing was sent.
 BEFORE_SEND = (
     "gateway descriptor",
@@ -93,7 +118,19 @@ def transcript_entries(payload: object) -> list[dict]:
         for key in ("entries", "messages", "items"):
             if isinstance(container.get(key), list):
                 return [e for e in container[key] if isinstance(e, dict)]
+    if isinstance(payload, dict) and "entryCount" in payload:
+        return []
     raise Problem("gbot thread 的格式看不懂", "更新 gbot 後重試")
+
+
+def instruction_text(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    for key in ("description", "instructions"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            return value
+    return ""
 
 
 def to_message(entry: dict, bot_name: str) -> Message:
@@ -139,24 +176,36 @@ class GrokSeat(Seat):
         clock=time.monotonic,
         sleep=time.sleep,
         now=now_utc,
+        account: str | None = None,
     ):
         self.runner = runner or Runner()
         self.binary = binary if binary is not None else find_tool("gbot", "TRINITY_GBOT", GBOT_FALLBACKS)
         self.default_bot = default_bot or os.environ.get("TRINITY_GROK_BOT") or None
         wanted = only_bots if only_bots is not None else os.environ.get("TRINITY_GROK_BOTS", "").split(",")
         self.only_bots = [name.strip() for name in wanted if name.strip()]
+        self.account = configured_gbot_account() if account is None else clean_account(account)
         self.clock = clock
         self.sleep = sleep
         self.now = now
-        self._after: bool | None = None
+        self._help: str | None = None
 
     # --- plumbing -------------------------------------------------------
+
+    def _child_env(self) -> dict:
+        env = env_with_tool_dir(self.binary)
+        if self.account:
+            env = dict(env)
+            env["GBOT_ACCOUNT"] = self.account
+        return env
 
     def _run(self, *args: str, stdin: str | None = None, timeout: float = 45.0):
         if not self.binary:
             raise Problem("找不到 gbot", FIX_INSTALL)
-        argv = [self.binary, "--json", *args]
-        return self.runner.run(argv, stdin=stdin, timeout=timeout, env=env_with_tool_dir(self.binary))
+        argv = [self.binary, "--json"]
+        if self.account and "--account" in self._help_text():
+            argv += ["--account", self.account]
+        argv += list(args)
+        return self.runner.run(argv, stdin=stdin, timeout=timeout, env=self._child_env())
 
     def _json(self, *args: str, timeout: float = 45.0) -> object:
         proc = self._run(*args, timeout=timeout)
@@ -167,13 +216,17 @@ class GrokSeat(Seat):
         except json.JSONDecodeError as exc:
             raise Problem(f"gbot {args[0]} 的輸出不是 JSON", "更新 gbot 後重試") from exc
 
-    def supports_after(self) -> bool:
-        if self._after is None:
+    def _help_text(self) -> str:
+        if self._help is None:
             if not self.binary:
-                return False
-            proc = self.runner.run([self.binary, "--help"], timeout=15, env=env_with_tool_dir(self.binary))
-            self._after = "--after" in proc.out + proc.err
-        return self._after
+                self._help = ""
+            else:
+                proc = self.runner.run([self.binary, "--help"], timeout=15, env=env_with_tool_dir(self.binary))
+                self._help = f"{proc.out}\n{proc.err}"
+        return self._help
+
+    def supports_after(self) -> bool:
+        return "--after" in self._help_text()
 
     def _doctor_problem(self) -> Problem | None:
         try:
@@ -268,8 +321,14 @@ class GrokSeat(Seat):
             key = f"grok.{bot['id']}"
             label = f"Grok Bot/{name}"
             cursor = cursors.get(key)
+            if not (isinstance(cursor, dict) and cursor.get("id")) and isinstance(cursors.get("*"), dict):
+                cursor = cursors["*"]
             try:
-                after = cursor.get("id") if (use_after and since is None and isinstance(cursor, dict)) else None
+                after = None
+                if use_after and since is None and isinstance(cursor, dict):
+                    found = cursor.get("id")
+                    if isinstance(found, str) and found and found != WINDOW_CURSOR_ID:
+                        after = found
                 payload = self._transcript(bot["id"], limit, after)
                 messages = [to_message(e, name) for e in transcript_entries(payload)]
             except Problem as problem:
@@ -281,8 +340,9 @@ class GrokSeat(Seat):
                 note = "這個來源沒有時間戳，--since 無法過濾，顯示整個視窗" if untimed and new else ""
                 return Batch(key, label, new, {"id": newest.key} if newest else cursor, False, note)
             if after:
-                gap = bool(payload.get("gapReset")) if isinstance(payload, dict) else False
-                new_id = payload.get("cursor") if isinstance(payload, dict) else None
+                body = payload if isinstance(payload, dict) else {}
+                gap = bool(body.get("gapReset"))
+                new_id = body.get("cursor") if isinstance(body.get("cursor"), str) and body.get("cursor") else None
                 note = f"gbot 回報 gapReset：上次位置不在最近 {limit} 則內" if gap else ""
                 return Batch(key, label, messages, {"id": new_id or after}, gap, note)
             new, gap, new_cursor, note = transcript_delta(messages, cursor if isinstance(cursor, dict) else None)
@@ -295,6 +355,90 @@ class GrokSeat(Seat):
                 else:
                     outcome.batches.append(item)
         return Result.ok(outcome)
+
+    # --- schedules / instructions ---------------------------------------
+
+    def _schedule_command(self) -> str | None:
+        text = self._help_text()
+        for name in _SCHEDULE_COMMANDS:
+            if name in text:
+                return name
+        return None
+
+    def schedules(self) -> Result:
+        command = self._schedule_command()
+        if command is None:
+            return Result.unsupported("gbot 沒有排程指令")
+        listed = f"{command} list" in self._help_text()
+        try:
+            payload = self._json(command, "list") if listed else self._json(command)
+        except Problem as problem:
+            return Result.failed(problem.error, problem.hint)
+        return Result.ok(parse_schedules(payload))
+
+    def _named_bots(self) -> list[tuple[str, str]]:
+        bots = self._bots()
+        return [(str(bot.get("name")), str(bot.get("id"))) for bot in bots if bot.get("name")]
+
+    def _pick_bot(self, target: str | None) -> tuple[str, str]:
+        target = target or self.default_bot
+        pairs = self._named_bots()
+        if target:
+            for name, ref in pairs:
+                if target in (name, ref):
+                    return name, name
+            return target, target
+        if len(pairs) != 1:
+            raise Problem(
+                "Grok Bot 不只一個 bot，不知道要看哪一個",
+                "用 --grok-bot、grok:<bot>，或設定 TRINITY_GROK_BOT",
+            )
+        return pairs[0][0], pairs[0][0]
+
+    def _instruction_flags(self) -> tuple[bool, bool]:
+        text = self._help_text()
+        return ("bots get" in text, "bots update" in text and "--instructions" in text)
+
+    def instructions(self, target: str | None = None, *, update: str | None = None) -> Result:
+        can_read, can_write = self._instruction_flags()
+        if update is not None:
+            if not can_write:
+                return Result.unsupported("gbot 沒有 bots update --instructions")
+            if update.startswith("-"):
+                return Result.failed("指令內容以 - 開頭，gbot 會把它當成參數，沒有寫入", "在 brief 開頭加一行普通文字")
+            try:
+                name, ref = self._pick_bot(target)
+            except Problem as problem:
+                return Result.failed(f"{problem.error}，沒有寫入", problem.hint)
+            try:
+                proc = self._run("bots", "update", ref, "--instructions", update, timeout=60)
+            except Problem as problem:
+                return Result.failed(f"{problem.error}，沒有寫入", problem.hint)
+            if proc.code != 0 or proc.timed_out:
+                problem = problem_from(proc)
+                return Result.failed(f"{problem.error}，沒有寫入", problem.hint)
+            return Result.ok(InstructionText(name, update, True))
+        if not can_read and not can_write:
+            return Result.unsupported("gbot 沒有讀寫指令的指令")
+        if not can_read:
+            return Result.ok(InstructionText(target or self.default_bot or "", "", can_write))
+        try:
+            if target or self.default_bot:
+                selected = [self._pick_bot(target)]
+            else:
+                selected = self._named_bots()
+        except Problem as problem:
+            return Result.failed(problem.error, problem.hint)
+        texts: list[InstructionText] = []
+        for name, ref in selected:
+            try:
+                payload = self._json("bots", "get", ref)
+            except Problem as problem:
+                return Result.failed(problem.error, problem.hint)
+            texts.append(InstructionText(name, instruction_text(payload), can_write))
+        if len(texts) == 1:
+            return Result.ok(texts[0])
+        return Result.ok(texts)
 
     # --- send / wait ----------------------------------------------------
 

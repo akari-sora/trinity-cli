@@ -35,7 +35,7 @@ class FakeRunner:
         self.calls: list[dict] = []
 
     def run(self, argv, *, stdin=None, timeout=60.0, env=None):
-        self.calls.append({"argv": list(argv), "stdin": stdin})
+        self.calls.append({"argv": list(argv), "stdin": stdin, "env": env})
         args = list(argv[1:])
         if args and args[0] == "--json":
             args = args[1:]
@@ -45,6 +45,8 @@ class FakeRunner:
         out = []
         for call in self.calls:
             args = [a for a in call["argv"][1:] if a != "--json"]
+            if args[:1] == ["--account"]:
+                args = args[2:]
             out.append(args[0] if args else "")
         return out
 
@@ -172,6 +174,7 @@ class DotWorld:
         self.messages = list(messages or [])
         self.dot = dot or dot_record()
         self.activity = activity if activity is not None else {"data": [], "next_cursor": "cur"}
+        self.automations: list = []
         self.overrides: dict = {}
         self.sent: list[str] = []
         self.send_result = None
@@ -191,6 +194,8 @@ class DotWorld:
             return ok(ENV_PAYLOAD)
         if command == "activity":
             return ok({"status": 200, "body": self.activity, "info": False})
+        if command == "automations":
+            return ok({"status": 200, "body": {"items": self.automations, "future": True}, "info": False})
         if command == "messages":
             limit = int(args[args.index("--limit") + 1])
             return ok(self.messages[-limit:])
@@ -218,10 +223,24 @@ def grok_entry(entry_id: str, role: str, text: str, at: str | None = None) -> di
 class GrokWorld:
     """A fake gbot with one or more bots and per-bot transcripts."""
 
-    def __init__(self, transcripts=None, supports_after: bool = False, bots=None):
+    def __init__(
+        self,
+        transcripts=None,
+        supports_after: bool = False,
+        bots=None,
+        supports_account: bool = False,
+        supports_instructions: bool = False,
+        supports_schedules: bool = False,
+    ):
         self.bots = bots or [{"id": BOT_ID, "name": "蝴蝶", "kind": "bot"}]
         self.transcripts = transcripts if transcripts is not None else {BOT_ID: []}
         self.supports_after = supports_after
+        self.supports_account = supports_account
+        self.supports_instructions = supports_instructions
+        self.supports_schedules = supports_schedules
+        self.instruction_text = ""
+        self.updates: list[dict] = []
+        self.schedule_items: list = []
         self.overrides: dict = {}
         self.sent: list[str] = []
         self.send_result = None
@@ -234,8 +253,20 @@ class GrokWorld:
         return None
 
     def __call__(self, args, stdin):
-        if args == ["--help"]:
-            return Proc(0, "Usage: gbot thread <bot> [--limit N]" + (" [--after ID]" if self.supports_after else ""), "")
+        args = list(args)
+        if args[:1] == ["--account"]:
+            args = args[2:]
+        if args[:1] == ["--help"]:
+            lines = ["Usage: gbot [--json] <command>", "  thread <bot> [--limit N]" + (" [--after ID]" if self.supports_after else "")]
+            if self.supports_account:
+                lines.append("  --account NAME")
+                lines.append("GBOT_ACCOUNT")
+            if self.supports_instructions:
+                lines.append("  bots get <id-or-name>")
+                lines.append("  bots update <id-or-name> [--instructions TEXT]")
+            if self.supports_schedules:
+                lines.append("  routines list")
+            return Proc(0, "\n".join(lines), "")
         command = args[0]
         if command in self.overrides:
             value = self.overrides[command]
@@ -244,13 +275,31 @@ class GrokWorld:
             return ok(self.doctor)
         if command == "bots" and args[1] == "list":
             return ok(self.bots)
+        if command == "bots" and args[1] == "get":
+            bot = self._bot(args[2])
+            if bot is None:
+                return fail(1, f'No bot or group named "{args[2]}"')
+            return ok({"id": bot["id"], "name": bot["name"], "description": self.instruction_text, "kind": "bot", "futureField": 1})
+        if command == "bots" and args[1] == "update":
+            if "--instructions" not in args:
+                return fail(1, "update needs --instructions")
+            text = args[args.index("--instructions") + 1]
+            self.updates.append({"ref": args[2], "text": text})
+            self.instruction_text = text
+            return ok({"name": args[2], "description": text, "kind": "bot"})
+        if command == "routines":
+            return ok({"items": self.schedule_items, "future": True})
         if command == "thread":
             bot = self._bot(args[1])
             if bot is None:
                 return fail(1, f'No bot or group named "{args[1]}"')
             limit = int(args[args.index("--limit") + 1])
             entries = self.transcripts.get(bot["id"], [])[-limit:]
-            payload = {"target": {"id": bot["id"], "name": bot["name"], "isGroup": False}, "transcript": {"entries": entries}}
+            payload = {
+                "target": {"id": bot["id"], "name": bot["name"], "isGroup": False},
+                "transcript": {"entries": entries},
+                "watermark": {"ok": True},
+            }
             if "--after" in args:
                 after = args[args.index("--after") + 1]
                 ids = [e["id"] for e in entries]
