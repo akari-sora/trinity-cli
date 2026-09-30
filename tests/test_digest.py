@@ -165,10 +165,27 @@ class DotReadTests(unittest.TestCase):
 
     def test_messages_failure_is_a_source_failure(self):
         world = DotWorld()
-        world.overrides["messages"] = fail(3, "GET messages failed (422)")
+        world.overrides["messages"] = fail(3, "GET /tbo/{id}/messages 500 upstream")
         result = self.seat(world).read({})
         self.assertEqual(result.state, "ok")
-        self.assertIn("422", result.value.failures[0].error)
+        self.assertIn("500", result.value.failures[0].error)
+        self.assertNotIn("登入", result.value.failures[0].error)
+
+    def test_v021_object_shape_empty_room_and_no_positional_id(self):
+        world = DotWorld()
+        seat = DotSeat(FakeRunner(world), binary="chatgpt-dot-cli", dot_id="tbo_fakeDot0001abc", hostnames=set())
+        result = seat.read({})
+        self.assertEqual(result.state, "ok")
+        self.assertEqual(result.value.batches[0].items, [])
+        argv = next(call["argv"] for call in seat.runner.calls if "messages" in call["argv"])
+        self.assertEqual(argv, ["chatgpt-dot-cli", "--json", "messages", "--limit", "30", "--dot-id", "tbo_fakeDot0001abc"])
+
+    def test_usage_exit_is_not_a_login_failure(self):
+        world = DotWorld()
+        world.overrides["messages"] = fail(2, "limit must be an integer from 1 to 32")
+        result = self.seat(world).read({})
+        self.assertIn("limit", result.value.failures[0].error)
+        self.assertNotIn("登入檔", result.value.failures[0].error)
 
 
 class GrokReadTests(unittest.TestCase):
@@ -193,7 +210,7 @@ class GrokReadTests(unittest.TestCase):
                           supports_after=True)
         seat = self.seat(world)
         batch = seat.read({f"grok.{BOT_ID}": {"id": "e1"}}).value.batches[0]
-        thread_argv = next(c["argv"] for c in seat.runner.calls if "thread" in c["argv"])
+        thread_argv = next(c["argv"] for c in seat.runner.calls if "thread" in c["argv"] and "--help" not in c["argv"])
         self.assertIn("--after", thread_argv)
         self.assertEqual([m.text for m in batch.items], ["a"])
         self.assertEqual(batch.new_cursor, {"id": "e2"})

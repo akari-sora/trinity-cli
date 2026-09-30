@@ -164,7 +164,7 @@ class AskFlowTests(AskTestCase):
         code, text = self.ask([seat], "grok", "nobody", "hi")
         self.assertEqual(code, 1)
         self.assertIn("沒有送出", text)
-        self.assertNotIn("thread", seat.runner.commands())
+        self.assertFalse(any("thread" in call["argv"] and "--help" not in call["argv"] for call in seat.runner.calls))
         self.assertEqual(self.events(), ["sending", "not_sent"])
 
     def test_grok_needs_a_bot_when_there_are_several(self):

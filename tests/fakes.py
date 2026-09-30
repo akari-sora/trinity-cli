@@ -197,8 +197,20 @@ class DotWorld:
         if command == "automations":
             return ok({"status": 200, "body": {"items": self.automations, "future": True}, "info": False})
         if command == "messages":
-            limit = int(args[args.index("--limit") + 1])
-            return ok(self.messages[-limit:])
+            if args[1:2] and not args[1].startswith("--"):
+                return fail(2, "messages does not take a positional dot id; use --dot-id")
+            limit = int(args[args.index("--limit") + 1]) if "--limit" in args else 20
+            chosen = self.messages[-limit:]
+            name = self.dot.get("display_name") or "Your dot"
+            return ok(
+                {
+                    "name": name,
+                    "lines": [f"{item.get('id')}: {item.get('preview', '')}" for item in chosen],
+                    "messages": chosen,
+                    "note": None if chosen else "no messages yet (send creates the room)",
+                    "extra": {"ignored": True},
+                }
+            )
         if command == "send":
             text = args[args.index("--") + 1]
             self.sent.append(text)
@@ -254,9 +266,16 @@ class GrokWorld:
 
     def __call__(self, args, stdin):
         args = list(args)
-        if args[:1] == ["--account"]:
-            args = args[2:]
-        if args[:1] == ["--help"]:
+        stripped = []
+        index = 0
+        while index < len(args):
+            if args[index] == "--account":
+                index += 2
+                continue
+            stripped.append(args[index])
+            index += 1
+        args = stripped
+        if "--help" in args:
             lines = ["Usage: gbot [--json] <command>", "  thread <bot> [--limit N]" + (" [--after ID]" if self.supports_after else "")]
             if self.supports_account:
                 lines.append("  --account NAME")

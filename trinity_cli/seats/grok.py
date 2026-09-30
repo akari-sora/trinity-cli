@@ -42,7 +42,8 @@ FIX_APP = "打開 Grok Bot app 確認已登入，再跑 `gbot doctor`"
 FIX_INSTALL = "安裝 gbot（見 README）或設定 TRINITY_GBOT"
 FIX_AMBIGUOUS = (
     "設定 TRINITY_GBOT_ACCOUNT（或 ~/.trinity-cli/config.json 的 gbot_account）。"
-    "gbot 支援 --account 後 trinity 會帶過去；在那之前請打開 Grok Bot app，只留一個登入，再跑 `gbot doctor`"
+    "trinity 會在 gbot thread 的說明裡看到 --account 時帶上它，也會設 GBOT_ACCOUNT。"
+    "打開 Grok Bot app 確認登入，用 `gbot accounts` 看標籤，再跑 `gbot doctor`"
 )
 _SCHEDULE_COMMANDS = ("schedules", "routines", "automations")
 # gbot fails with these before any gateway request, so nothing was sent.
@@ -202,10 +203,10 @@ class GrokSeat(Seat):
     def _run(self, *args: str, stdin: str | None = None, timeout: float = 45.0):
         if not self.binary:
             raise Problem("找不到 gbot", FIX_INSTALL)
-        argv = [self.binary, "--json"]
+        argv = [self.binary, "--json", *args]
+        # --account is a subcommand option. Before the command name, gbot rejects it.
         if self.account and "--account" in self._help_text():
             argv += ["--account", self.account]
-        argv += list(args)
         return self.runner.run(argv, stdin=stdin, timeout=timeout, env=self._child_env())
 
     def _json(self, *args: str, timeout: float = 45.0) -> object:
@@ -218,14 +219,31 @@ class GrokSeat(Seat):
             raise Problem(f"gbot {args[0]} 的輸出不是 JSON", "更新 gbot 後重試") from exc
 
     def _help_text(self) -> str:
+        """Root help plus the subcommand helps that document --account and --after.
+
+        `gbot --help` only lists command names. `--account` and `thread --after`
+        appear on `gbot thread --help` and `gbot send --help`.
+        """
         if self._help is None:
             if not self.binary:
                 self._help = ""
                 self._help_missing = True
             else:
-                proc = self.runner.run([self.binary, "--help"], timeout=15, env=env_with_tool_dir(self.binary))
-                self._help_missing = proc.code == 127
-                self._help = "" if self._help_missing else f"{proc.out}\n{proc.err}"
+                chunks: list[str] = []
+                missing = False
+                for extra in ((), ("thread",), ("bots",)):
+                    proc = self.runner.run(
+                        [self.binary, *extra, "--help"],
+                        timeout=15,
+                        env=env_with_tool_dir(self.binary),
+                    )
+                    if proc.code == 127:
+                        missing = True
+                        break
+                    chunks.append(proc.out or "")
+                    chunks.append(proc.err or "")
+                self._help_missing = missing
+                self._help = "" if missing else "\n".join(chunks)
         return self._help
 
     def _gbot_missing(self) -> Result | None:
@@ -484,7 +502,10 @@ class GrokSeat(Seat):
                 payload = {}
             name = payload.get("name") if isinstance(payload, dict) else None
             ref = payload.get("id") if isinstance(payload, dict) else None
-            return Result.ok(SendReceipt(f"Grok Bot/{name or target}", str(ref or target), nonce, sent_at, "accepted"))
+            delivery = payload.get("delivery") if isinstance(payload, dict) else None
+            if delivery not in {"accepted", "unknown"}:
+                delivery = "accepted"
+            return Result.ok(SendReceipt(f"Grok Bot/{name or target}", str(ref or target), nonce, sent_at, delivery))
         err = short_error(proc.err)
         if proc.code == 127 or (not proc.timed_out and any(mark in err.lower() for mark in BEFORE_SEND)):
             problem = problem_from(proc)

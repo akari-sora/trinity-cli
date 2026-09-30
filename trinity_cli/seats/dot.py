@@ -17,7 +17,7 @@ from trinity_cli.runner import Runner, find_tool
 from trinity_cli.seats.base import Problem, Seat
 from trinity_cli.util import has_nonce, iso, local_stamp, now_utc, one_line, parse_time, with_nonce
 
-# The messages API answers 422 above 32 even though chatgpt-dot-cli allows 50.
+# chatgpt-dot-cli v0.2.1 rejects --limit outside 1..32 with exit 2 and sends no request.
 MESSAGE_LIMIT = 30
 MESSAGE_LIMIT_MAX = 32
 FIRST_READ = 10
@@ -108,7 +108,11 @@ class DotSeat(Seat):
         if proc.code == 127:
             raise Problem("找不到 chatgpt-dot-cli", FIX_INSTALL)
         if proc.code == 2:
-            raise Problem("ChatGPT 登入檔不能用（不存在或不是 ChatGPT 登入）", FIX_LOGIN)
+            err = short_error(proc.err)
+            low = err.lower()
+            if any(mark in low for mark in ("auth file", "chatgpt login", "access token", "account id", "login expired", "401")):
+                raise Problem("ChatGPT 登入檔不能用（不存在或不是 ChatGPT 登入）", FIX_LOGIN)
+            raise Problem(f"chatgpt-dot-cli {command} 用法錯誤：{err or 'exit 2'}", "檢查參數；`--limit` 只能是 1 到 32，dot id 用 `--dot-id`")
         if proc.code != 0:
             err = short_error(proc.err)
             if "401" in err or "login expired" in err.lower():
@@ -141,6 +145,9 @@ class DotSeat(Seat):
         return dots[0]
 
     def _messages(self, raw: object, dot: dict) -> list[Message]:
+        # v0.2.1 --json is always {"name","lines","messages"} (oldest first).
+        # Extra keys, including "note" on an empty room, are ignored. A bare list
+        # is still accepted so a partial payload does not get misread as a speaker.
         if isinstance(raw, dict) and isinstance(raw.get("messages"), list):
             raw = raw["messages"]
         if not isinstance(raw, list):

@@ -15,11 +15,27 @@ class AccountTests(unittest.TestCase):
         runner = FakeRunner(world)
         seat = GrokSeat(runner, binary="/fake/bin/gbot", only_bots=[], account="work")
         self.assertEqual(seat.status().state, "ok")
-        bots = next(call for call in runner.calls if "bots" in call["argv"])
+        bots = next(call for call in runner.calls if "list" in call["argv"])
+        self.assertLess(bots["argv"].index("list"), bots["argv"].index("--account"))
         self.assertEqual(bots["argv"][bots["argv"].index("--account") + 1], "work")
         self.assertEqual(bots["env"]["GBOT_ACCOUNT"], "work")
         help_call = next(call for call in runner.calls if call["argv"][1:] == ["--help"])
         self.assertNotIn("--account", help_call["argv"])
+        thread_help = next(call for call in runner.calls if call["argv"][1:] == ["thread", "--help"])
+        self.assertEqual(thread_help["argv"][1:], ["thread", "--help"])
+
+    def test_unknown_send_delivery_is_kept_and_not_resent(self):
+        from tests.fakes import ok
+
+        world = GrokWorld(supports_account=True)
+        world.send_result = ok({"name": "蝴蝶", "id": BOT_ID, "delivery": "unknown", "exitCode": 0})
+        runner = FakeRunner(world)
+        seat = GrokSeat(runner, binary="/fake/bin/gbot", only_bots=[], account="work")
+        result = seat.send("蝴蝶", "hi", "abc123")
+        self.assertEqual(result.state, "ok")
+        self.assertEqual(result.value.delivery, "unknown")
+        self.assertEqual(len(world.sent), 1)
+        self.assertEqual(sum(1 for call in runner.calls if "send" in call["argv"] and "--help" not in call["argv"]), 1)
 
     def test_unknown_flag_is_not_passed(self):
         world = GrokWorld()
@@ -28,7 +44,7 @@ class AccountTests(unittest.TestCase):
         self.assertEqual(seat.status().state, "ok")
         for call in runner.calls:
             self.assertNotIn("--account", call["argv"])
-        bots = next(call for call in runner.calls if "bots" in call["argv"])
+        bots = next(call for call in runner.calls if "list" in call["argv"])
         self.assertEqual(bots["env"]["GBOT_ACCOUNT"], "work")
 
     def test_thread_after_keeps_extra_fields(self):

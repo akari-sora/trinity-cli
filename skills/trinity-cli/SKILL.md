@@ -34,4 +34,5 @@ Rules:
 - Do not read `~/.codex/auth.json` or the Grok Bot app session. Do not print tokens or ids.
 - Do not pause, resume, delete, or reconfigure any agent, except `brief push` to a Grok bot when the user asked.
 - Exit code 1 means some seat failed or a wait ended with no reply. Exit code 2 on `hand` or `brief push` means nothing was sent because it was not confirmed. Read the output instead of retrying blindly.
-- Never resend after a timeout. Never chain `hand` on your own.
+- Never resend after a timeout. Never chain `hand` on your own. `hand` and `brief push` need confirmation; do not pass `--yes` unless the user already asked to send.
+- Do not ask an agent to delete files, message anyone, buy anything, or change settings or accounts.

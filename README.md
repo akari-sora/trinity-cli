@@ -12,9 +12,17 @@ trinity 不自己連服務，也不碰登入：Your dot 走 `chatgpt-dot-cli --j
 
 ### 安裝
 
-1. `chatgpt-dot-cli`：`uv tool install git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.1.3`。401 時跑 `codex login`。
-2. `gbot`：clone 使用者的 fork `ImL1s/grok-bot-cli`，在 clone 裡跑 `node --test && npm link`。需要 Node 18+ 和已登入的 Grok Bot macOS app。
-3. `muse-web-cli`（瀏覽器，headless 或有視窗；`api` backend 仍是接縫）：
+第一次設定：
+
+1. Your dot：`codex login`（401 時重跑）。
+2. Grok Bot：打開 Grok Bot app 登入。有多個登入時，用 `gbot accounts` 看標籤，把要用的那個寫進 `TRINITY_GBOT_ACCOUNT` 或 `~/.trinity-cli/config.json` 的 `gbot_account`。trinity 會設 `GBOT_ACCOUNT`，並在 `gbot thread --help` 有 `--account` 時把旗標放在子命令後面（放在命令名稱前面會被 gbot 拒絕）。
+3. Muse：`muse-web-cli login`（有視窗），登入完成後 `muse-web-cli start --headless`。之後 headless 或有視窗都可以。
+
+三個依賴，版本釘選：
+
+1. `chatgpt-dot-cli` v0.2.1：`uv tool install git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.1`。`messages --json` 固定是 `{"name","lines","messages"}`（舊到新）。`--limit` 只能 1 到 32，否則結束碼 2、不會送請求。dot id 用 `--dot-id`，不能當位置參數。非 200 會先在 stderr 印一行再以結束碼 3 離開。
+2. `gbot`（使用者的 fork v0.11.2-iml1s.1）：`npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.1`。或 clone 後在裡面 `npm link`。需要 Node 18+ 和已登入的 Grok Bot app。
+3. `muse-web-cli` v0.1.0（瀏覽器，headless 或有視窗；`api` backend 仍是接縫）：
 
    ```bash
    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
@@ -97,7 +105,9 @@ Muse 的 `send` 不帶 `--wait`。trinity 先記 ledger，送出一次，再用 
 
 做得到：`status`、`digest`、`ask`、`hand`、`wait`、`schedules`、`who`、`brief`、`log`（Your dot、Grok bot、Muse）。Muse 的排程來自 upcoming；待處理事項出現在 status。
 
-做不到：把 Your dot 或 Muse 的 standing instructions 直接寫進去（沒有 API，`brief push` 只印草稿）；寫入 Muse 的 memory（`brief diff` 只讀）；暫停／恢復／刪除 agent；逾時自動重送；`hand` 自動再轉下一手。Grok 群組只在 `ask grok <群組>` 和 `hand`／`wait` 的 `grok:<名字>` 時可用，`status` 和 `digest` 只看 bot。Grok 和 Muse 的訊息如果沒有時間戳，會顯示「時間不明」，排在時間線最後。Grok 多個登入時，設定下面的帳號；gbot 支援 `--account` 之後 trinity 會帶上，在那之前 status 仍可能失敗。
+做不到：把 Your dot 或 Muse 的 standing instructions 直接寫進去（沒有 API，`brief push` 只印草稿）；寫入 Muse 的 memory（`brief diff` 只讀）；暫停／恢復／刪除 agent；逾時自動重送；`hand` 自動再轉下一手。Grok 群組只在 `ask grok <群組>` 和 `hand`／`wait` 的 `grok:<名字>` 時可用，`status` 和 `digest` 只看 bot。Grok 和 Muse 的訊息如果沒有時間戳，會顯示「時間不明」，排在時間線最後。Grok 的送出收據有時是 `unknown`，trinity 照實記下，然後只輪詢、不重送。
+
+安全界線：`hand` 和 `brief push` 預設先問；不是終端機時沒有 `--yes` 就不送。`hand` 不會把目的地的回覆再轉出去。逾時只報告，絕不重送。
 
 ### 給 agent 用
 
@@ -118,7 +128,7 @@ ln -sfn "$PWD/skills/trinity-cli" ~/.claude/skills/trinity-cli
 | `TRINITY_DOT_ID` | 帳號有多個 dot 時指定一個 |
 | `TRINITY_GROK_BOT` | `ask all` 和 `brief` 預設的 Grok bot |
 | `TRINITY_GROK_BOTS` | `status`／`digest` 只看這些 bot（逗號分隔） |
-| `TRINITY_GBOT_ACCOUNT` | 多個 Grok Bot 登入時要用的帳號。也可寫在 `~/.trinity-cli/config.json` 的 `gbot_account`。trinity 會設 `GBOT_ACCOUNT`；gbot 說明裡有 `--account` 時才加那個旗標 |
+| `TRINITY_GBOT_ACCOUNT` | 多個 Grok Bot 登入時要用的標籤。也可寫在 `~/.trinity-cli/config.json` 的 `gbot_account`。trinity 會設 `GBOT_ACCOUNT`；`gbot thread --help` 有 `--account` 時把旗標放在子命令後面 |
 
 ## English
 
@@ -128,9 +138,17 @@ trinity never talks to the services or touches logins itself. Your dot goes thro
 
 ### Install
 
-1. `chatgpt-dot-cli`: `uv tool install git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.1.3`. On a 401, run `codex login`.
-2. `gbot`: clone the fork `ImL1s/grok-bot-cli` and run `node --test && npm link` in it. Needs Node 18+ and a signed-in Grok Bot macOS app.
-3. `muse-web-cli` (headless or headed browser; the `api` backend is still a seam):
+First-time setup:
+
+1. Your dot: `codex login` (run it again on a 401).
+2. Grok Bot: sign in with the Grok Bot app. When several logins are saved, pick a label with `gbot accounts` and set `TRINITY_GBOT_ACCOUNT` or `gbot_account` in `~/.trinity-cli/config.json`. trinity exports `GBOT_ACCOUNT` and, when `gbot thread --help` documents `--account`, appends that flag after the subcommand (gbot rejects it before the command name).
+3. Muse: `muse-web-cli login` in a visible window, then `muse-web-cli start --headless`. Later runs can be headless or headed.
+
+Pinned dependencies:
+
+1. `chatgpt-dot-cli` v0.2.1: `uv tool install git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.1`. `messages --json` is always `{"name","lines","messages"}` (oldest first). `--limit` must be 1..32, or the command exits 2 and sends no request. Pass a dot id with `--dot-id`, not as a positional. A non-200 prints one stderr line and exits 3.
+2. `gbot`, the fork v0.11.2-iml1s.1: `npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.1`, or clone the repo and `npm link`. Needs Node 18+ and a signed-in Grok Bot app.
+3. `muse-web-cli` v0.1.0 (headless or headed browser; the `api` backend is still a seam):
 
    ```bash
    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
@@ -176,7 +194,7 @@ For development in this checkout, `uv tool install --editable .` works. If `chat
 
 `--json` works before or after the command. Exit codes: 0 means everything is fine; 1 means a seat failed or `ask`, `hand`, or `wait` got no reply; 2 means a usage error, or `hand` / `brief push` refused to send because nobody confirmed. An unsupported seat is not a failure. A failing seat prints `✗` with its own fix, so it never looks like "nothing new".
 
-Cursors live in `~/.trinity-cli/state.json` (no secrets) and move only after digest output was printed. `--peek`, `--since`, `hand`, and `wait` never move them. When a cursor falls out of the window (Grok `gapReset`, more new dot messages than one read returns, or Muse's previously seen tail is gone from the window), the timeline says 可能漏看 ("possibly missed"). The dot messages API returns at most 32 per read (it answers 422 above that), so trinity reads 30. When `gbot --help` includes `thread --after`, trinity uses it and reads `cursor`, `entryCount`, and `gapReset`. Muse messages have no timestamps, only date separators, so their times stay unknown. The Muse cursor is a content hash plus how many times that text occurred in the window. Extra JSON fields are ignored.
+Cursors live in `~/.trinity-cli/state.json` (no secrets) and move only after digest output was printed. `--peek`, `--since`, `hand`, and `wait` never move them. When a cursor falls out of the window (Grok `gapReset`, more new dot messages than one read returns, or Muse's previously seen tail is gone from the window), the timeline says 可能漏看 ("possibly missed"). The dot messages API returns at most 32 per read, and chatgpt-dot-cli v0.2.1 exits 2 without a request above that, so trinity reads 30. When `gbot thread --help` includes `--after`, trinity uses it and reads `cursor`, `entryCount`, and `gapReset`. Muse messages have no timestamps, only date separators, so their times stay unknown. The Muse cursor is a content hash plus how many times that text occurred in the window. Extra JSON fields are ignored.
 
 Muse `send` does not pass `--wait`. trinity logs the ledger, sends once, then polls `messages` for the nonce and the next assistant reply. A timeout stops polling and **never calls send again**. `session_expired` tells you to run `muse-web-cli login`. `browser_down` tells you to run `muse-web-cli start --headless`. Pending items show up on `status` as 等你處理 ("waiting on you") when the count is greater than zero.
 
@@ -184,7 +202,9 @@ Every `ask` and `hand` send is logged to `~/.trinity-cli/ledger.jsonl` before it
 
 **Nonce.** `ask` and `hand` append one line, `[trinity abc123]`, after a blank line. Your text is unchanged; readback looks for that tag in your own messages to confirm delivery. A short visible tag is used instead of zero-width characters because either service may strip hidden characters, and hidden markers are invisible to the people and agents reading the thread. When a dot send returns a message id, trinity also confirms by id.
 
-**Not available:** writing standing instructions for Your dot or Muse (`brief push` prints a draft); writing Muse memory (`brief diff` only reads it); pause, resume, or delete; resending after a timeout; auto-chaining `hand`. Grok groups work with `ask grok <group>` and `grok:<name>` on `hand` / `wait`; `status` and `digest` cover bots only. Grok and Muse entries without a timestamp show as 時間不明 ("time unknown") and sort last. For several Grok Bot logins, set `TRINITY_GBOT_ACCOUNT` or `gbot_account` in `~/.trinity-cli/config.json`. trinity exports `GBOT_ACCOUNT` and adds `--account` only after `gbot --help` documents it.
+**Safety.** `hand` and `brief push` ask first. Without a terminal, they do not send unless you pass `--yes`. `hand` does not chain the destination's reply onward. A timeout is reported and never resent. A Grok send receipt of `unknown` is kept as unknown; trinity polls and does not send again.
+
+**Not available:** writing standing instructions for Your dot or Muse (`brief push` prints a draft); writing Muse memory (`brief diff` only reads it); pause, resume, or delete; resending after a timeout; auto-chaining `hand`. Grok groups work with `ask grok <group>` and `grok:<name>` on `hand` / `wait`; `status` and `digest` cover bots only. Grok and Muse entries without a timestamp show as 時間不明 ("time unknown") and sort last. For several Grok Bot logins, set `TRINITY_GBOT_ACCOUNT` or `gbot_account` in `~/.trinity-cli/config.json`. trinity exports `GBOT_ACCOUNT` and, when `gbot thread --help` documents `--account`, appends that flag after the subcommand (gbot rejects it before the command name).
 
 **Agents:** the skill is `skills/trinity-cli/SKILL.md`. Link that folder into an agent's skill directory when the directory already exists, for example `ln -sfn "$PWD/skills/trinity-cli" ~/.claude/skills/trinity-cli`. The same set as chatgpt-dot-cli: `~/.codex/skills`, `~/.agents/skills`, `~/.config/opencode/skills`, `~/.config/opencode/skill`, `~/.cursor/skills`, `~/.grok/skills`.
 
