@@ -188,6 +188,7 @@ class GrokSeat(Seat):
         self.sleep = sleep
         self.now = now
         self._help: str | None = None
+        self._help_missing = False
 
     # --- plumbing -------------------------------------------------------
 
@@ -220,10 +221,18 @@ class GrokSeat(Seat):
         if self._help is None:
             if not self.binary:
                 self._help = ""
+                self._help_missing = True
             else:
                 proc = self.runner.run([self.binary, "--help"], timeout=15, env=env_with_tool_dir(self.binary))
-                self._help = f"{proc.out}\n{proc.err}"
+                self._help_missing = proc.code == 127
+                self._help = "" if self._help_missing else f"{proc.out}\n{proc.err}"
         return self._help
+
+    def _gbot_missing(self) -> Result | None:
+        self._help_text()
+        if not self.binary or self._help_missing:
+            return Result.failed("找不到 gbot", FIX_INSTALL)
+        return None
 
     def supports_after(self) -> bool:
         return "--after" in self._help_text()
@@ -366,6 +375,9 @@ class GrokSeat(Seat):
         return None
 
     def schedules(self) -> Result:
+        missing = self._gbot_missing()
+        if missing:
+            return missing
         command = self._schedule_command()
         if command is None:
             return Result.unsupported("gbot 沒有排程指令")
@@ -400,6 +412,11 @@ class GrokSeat(Seat):
         return ("bots get" in text, "bots update" in text and "--instructions" in text)
 
     def instructions(self, target: str | None = None, *, update: str | None = None) -> Result:
+        missing = self._gbot_missing()
+        if missing:
+            if update is None:
+                return missing
+            return Result.failed(f"{missing.error}，沒有寫入", missing.hint)
         can_read, can_write = self._instruction_flags()
         if update is not None:
             if not can_write:

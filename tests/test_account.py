@@ -99,6 +99,10 @@ class AccountTests(unittest.TestCase):
         self.assertEqual(grok.schedules().state, "unsupported")
         self.assertIn("沒有排程", grok.schedules().error)
         self.assertEqual(grok.instructions(update="nope").state, "unsupported")
+        missing = GrokSeat(FakeRunner(GrokWorld()), binary="", only_bots=[])
+        self.assertEqual(missing.schedules().state, "failed")
+        self.assertIn("找不到 gbot", missing.schedules().error)
+        self.assertIn("沒有寫入", missing.instructions(update="nope").error)
 
     def test_entry_count_without_a_transcript_is_empty(self):
         from trinity_cli.seats.grok import transcript_entries
