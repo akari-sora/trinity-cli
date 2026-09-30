@@ -1,0 +1,9 @@
+auth.json
+.env
+state.json
+ledger.jsonl
+__pycache__/
+*.pyc
+.venv/
+.omc/
+*.egg-info/

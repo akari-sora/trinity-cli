@@ -1,0 +1,17 @@
+[project]
+name = "trinity-cli"
+version = "0.1.0"
+description = "One command in front of your always-on personal agents: ChatGPT Your dot, Grok Bot, and a Muse placeholder."
+requires-python = ">=3.11"
+dependencies = []
+license = { text = "MIT" }
+
+[project.scripts]
+trinity-cli = "trinity_cli.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["trinity_cli*"]
