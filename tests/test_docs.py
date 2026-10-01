@@ -16,7 +16,6 @@ URLS = (
     "https://gitlab.com/aa22396584/trinity-cli",
     "https://gitlab.com/aa22396584/chatgpt-dot-cli",
     "https://gitlab.com/aa22396584/grok-bot-cli",
-    "https://github.com/ImL1s/grok-bot-cli",
     "https://gitlab.com/aa22396584/muse-web-cli",
 )
 
@@ -80,6 +79,12 @@ class DocsDriftTests(unittest.TestCase):
         self.assertEqual(set(re.findall(r"trinity-cli\.git@v([^\"\s]+)", README)), {version})
         self.assertEqual(README.count(f"v{version} 釘這些版本"), 1)
         self.assertEqual(README.count(f"v{version} pins these versions"), 1)
+        self.assertNotIn("Node 18+", README)
+        self.assertIn("22.19.0", README)
+        self.assertNotIn("github.com/ImL1s/grok-bot-cli", README)
+        self.assertNotIn("npm install -g \"git+https://gitlab.com/aa22396584/grok-bot-cli", README)
+        self.assertGreaterEqual(README.count("grok-bot-cli-0.11.2.tgz"), 4)
+        self.assertIn("FORK.md#install", README)
 
     def test_docs_say_login_muse_stores_the_gateway_token(self):
         for text in (README, SKILL):

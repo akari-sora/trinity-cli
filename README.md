@@ -30,20 +30,24 @@
 
 - trinity-cli（這個 repo）— 一個指令包三個一直開著的 agent（Your dot、Grok Bot、Muse）：https://gitlab.com/aa22396584/trinity-cli
 - chatgpt-dot-cli — ChatGPT Your dot：https://gitlab.com/aa22396584/chatgpt-dot-cli
-- grok-bot-cli（fork，`gbot`）— Grok Bot：https://gitlab.com/aa22396584/grok-bot-cli （鏡像 https://github.com/ImL1s/grok-bot-cli）
+- grok-bot-cli（fork，`gbot`）— Grok Bot：https://gitlab.com/aa22396584/grok-bot-cli
 - muse-web-cli — 用網頁操作 Meta Muse：https://gitlab.com/aa22396584/muse-web-cli
 
 ### 安裝
 
-v0.4.3 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下：應印出 `muse-web-cli 0.1.4`、`trinity-cli 0.4.3`。舊的 muse-web-cli v0.1.2 沒有 `credential` 和 api gateway；v0.1.3 的 `send --wait` 在長聊天室會等不到回覆。
+v0.4.4 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下：應印出 `muse-web-cli 0.1.4`、`trinity-cli 0.4.4`、`gbot 0.11.2`。舊的 muse-web-cli v0.1.2 沒有 `credential` 和 api gateway；v0.1.3 的 `send --wait` 在長聊天室會等不到回覆。
 
-macOS 與 Linux（需要 Python 3.11+；Grok 還要 Node 18+）：
+macOS 與 Linux 需要 Python 3.11+、git、以及已在 PATH 上的 `uv`。Grok 還要 Node.js 22.19.0+ 和 npm。uv 的執行檔在 `~/.local/bin`；`--version` 找不到時把那個目錄加進 PATH。第一次 `uv tool install` 可能會下載 Python。
+
+不要用 `npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...`。那一行會結束碼 0，但 `gbot` 是斷掉的連結。改裝這個 tag 附的套件檔：
 
 ```bash
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
-npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
+curl -fsSL -o grok-bot-cli-0.11.2.tgz "https://gitlab.com/-/project/86401528/uploads/95fd5079c4507af7f3f8e61dd04ce6f3/grok-bot-cli-0.11.2.tgz"
+npm install -g ./grok-bot-cli-0.11.2.tgz
+rm -f grok-bot-cli-0.11.2.tgz
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.3"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.4"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -57,19 +61,21 @@ Windows（PowerShell，同樣的釘選）：
 ```powershell
 irm https://astral.sh/uv/install.ps1 | iex
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
-npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
+irm "https://gitlab.com/-/project/86401528/uploads/95fd5079c4507af7f3f8e61dd04ce6f3/grok-bot-cli-0.11.2.tgz" -OutFile grok-bot-cli-0.11.2.tgz
+npm install -g .\grok-bot-cli-0.11.2.tgz
+Remove-Item grok-bot-cli-0.11.2.tgz
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.3"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.4"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
 trinity-cli --version
 ```
 
-Windows 上 npm 的 `gbot` 是 `gbot.cmd`，uv 的工具是 `.exe`。trinity 用 `shutil.which` 找它們，參數以清單傳遞，不用 shell。
+Windows 上 npm 的 `gbot` 是 `gbot.cmd`，uv 的工具是 `.exe`。trinity 用 `shutil.which` 找它們，參數以清單傳遞，不用 shell。Windows 也要 Node.js 22.19.0+。
 
-升級到同一個釘選：把安裝指令再跑一次。`uv` 加 `--force`，npm 用同一行 `npm install -g`。
+升級到同一個釘選：把安裝指令再跑一次。`uv` 加 `--force`。gbot 再下載同一個 `.tgz` 後安裝。
 
 移除：
 
@@ -85,7 +91,7 @@ npm uninstall -g grok-bot-cli
 ### 第一次設定
 
 1. Your dot：`codex login`。401 時再跑一次。也可以 `trinity-cli login dot`。多個 dot 時設 `TRINITY_DOT_ID`。細節見 [chatgpt-dot-cli 疑難排解](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#疑難排解)。
-2. Grok Bot：打開 Grok Bot app 登入。`trinity-cli login grok` 只會重複這句，不會讀那個登入。有多個登入時先跑 `gbot accounts`，把要的標籤寫進設定。細節見 [grok-bot-cli Install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#install)。
+2. Grok Bot：打開 Grok Bot app 登入。`trinity-cli login grok` 只會重複這句，不會讀那個登入。有多個登入時先跑 `gbot accounts`，把要的標籤寫進設定。細節見 [grok-bot-cli 安裝](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install)。
 3. Muse 預設走網頁（browser 後端）：`muse-web-cli login`（看得到的視窗），完成後 `muse-web-cli start --headless`。或 `trinity-cli login muse --web`。api 後端（`--muse-backend api`，走 Muse gateway）要憑證：`trinity-cli login muse` 會執行 `muse-web-cli credential`，沒登入就先走登入，再把 gateway token 只寫進 `~/.trinity-cli/muse-credential`（mode 600），不印出。這個檔是 token，不要分享或提交。token 過期時會說「登入工作階段已失效」，在 Chrome 重新登入後再跑一次。`--api-key` 仍把金鑰從標準輸入交給 `muse auth set --api-key-stdin`。細節見 [muse-web-cli 排解](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#排解)。
 4. 多個 Grok 座位用登入標籤加 bot 名稱。`grok` 指向 `grok_default`。假值：
 
@@ -311,7 +317,7 @@ Muse 在讀和送之前先看 `chats`。目前是副聊天室時不送出，也�
 | Your dot 401 或登入檔不能用 | `codex login`。見 [chatgpt-dot-cli 疑難排解](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#疑難排解) |
 | Your dot 網路或非 200 | 先看 `chatgpt-dot-cli list` |
 | 找不到 chatgpt-dot-cli | 安裝，或設 `TRINITY_DOT_CLI` |
-| Grok 多個登入 | `gbot accounts`，再寫 `gbot_account`。見 [grok-bot-cli Install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#install) |
+| Grok 多個登入 | `gbot accounts`，再寫 `gbot_account`。見 [grok-bot-cli 安裝](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install) |
 | Grok 登入不能用 | 打開 Grok Bot app，跑 `gbot doctor` |
 | 找不到 gbot | 安裝，或設 `TRINITY_GBOT` |
 | Muse 瀏覽器沒起來 | `muse-web-cli start --headless` |
@@ -390,20 +396,24 @@ Supported systems: Linux (CI), Windows (CI), and macOS (local use and live check
 
 - trinity-cli (this repo) — one CLI over three always-on agents (Your dot, Grok Bot, Muse): https://gitlab.com/aa22396584/trinity-cli
 - chatgpt-dot-cli — ChatGPT Your dot: https://gitlab.com/aa22396584/chatgpt-dot-cli
-- grok-bot-cli (fork, `gbot`) — Grok Bot: https://gitlab.com/aa22396584/grok-bot-cli (mirror https://github.com/ImL1s/grok-bot-cli)
+- grok-bot-cli (fork, `gbot`) — Grok Bot: https://gitlab.com/aa22396584/grok-bot-cli
 - muse-web-cli — Meta Muse via the web: https://gitlab.com/aa22396584/muse-web-cli
 
 ### Install
 
-v0.4.3 pins these versions. After installing trinity and each seat tool, check every `--version`: expect `muse-web-cli 0.1.4` and `trinity-cli 0.4.3`. The older muse-web-cli v0.1.2 has no `credential` and no api gateway; v0.1.3's `send --wait` can miss the reply in a long chat.
+v0.4.4 pins these versions. After installing trinity and each seat tool, check every `--version`: expect `muse-web-cli 0.1.4`, `trinity-cli 0.4.4`, and `gbot 0.11.2`. The older muse-web-cli v0.1.2 has no `credential` and no api gateway; v0.1.3's `send --wait` can miss the reply in a long chat.
 
-macOS and Linux (Python 3.11+; Grok also needs Node 18+):
+macOS and Linux need Python 3.11+, git, and `uv` on `PATH`. Grok also needs Node.js 22.19.0+ and npm. uv installs commands under `~/.local/bin`; add that directory to `PATH` when `--version` cannot find them. The first `uv tool install` may download a Python.
+
+Do not run `npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...`. That command exits 0 and leaves a dangling `gbot`. Install the package file attached to the tag:
 
 ```bash
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
-npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
+curl -fsSL -o grok-bot-cli-0.11.2.tgz "https://gitlab.com/-/project/86401528/uploads/95fd5079c4507af7f3f8e61dd04ce6f3/grok-bot-cli-0.11.2.tgz"
+npm install -g ./grok-bot-cli-0.11.2.tgz
+rm -f grok-bot-cli-0.11.2.tgz
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.3"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.4"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -417,19 +427,21 @@ Windows (PowerShell, same pins):
 ```powershell
 irm https://astral.sh/uv/install.ps1 | iex
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
-npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
+irm "https://gitlab.com/-/project/86401528/uploads/95fd5079c4507af7f3f8e61dd04ce6f3/grok-bot-cli-0.11.2.tgz" -OutFile grok-bot-cli-0.11.2.tgz
+npm install -g .\grok-bot-cli-0.11.2.tgz
+Remove-Item grok-bot-cli-0.11.2.tgz
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.3"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.4"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
 trinity-cli --version
 ```
 
-On Windows, npm's `gbot` is `gbot.cmd` and uv tools are `.exe`. trinity finds them with `shutil.which` and passes arguments as a list, never through a shell.
+On Windows, npm's `gbot` is `gbot.cmd` and uv tools are `.exe`. trinity finds them with `shutil.which` and passes arguments as a list, never through a shell. Windows also needs Node.js 22.19.0+.
 
-Upgrade to the same pin by running the install again. Add `--force` for `uv`. Use the same `npm install -g` line for gbot.
+Upgrade to the same pin by running the install again. Add `--force` for `uv`. For gbot, download the same `.tgz` and install it again.
 
 Uninstall:
 
@@ -445,7 +457,7 @@ npm uninstall -g grok-bot-cli
 ### First-time setup
 
 1. Your dot: `codex login`. Run it again on a 401. `trinity-cli login dot` does the same. Set `TRINITY_DOT_ID` when the account has more than one dot. See the [chatgpt-dot-cli troubleshooting](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#troubleshooting) section.
-2. Grok Bot: sign in with the Grok Bot app. `trinity-cli login grok` only repeats that; it does not read the session. When several logins exist, run `gbot accounts` and save the label. See the [grok-bot-cli Install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#install) section.
+2. Grok Bot: sign in with the Grok Bot app. `trinity-cli login grok` only repeats that; it does not read the session. When several logins exist, run `gbot accounts` and save the label. See the [grok-bot-cli install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install) section.
 3. Muse defaults to the browser backend: `muse-web-cli login` in a visible window, then `muse-web-cli start --headless`. Or `trinity-cli login muse --web`. The api backend (`--muse-backend api`, the Muse gateway) needs a credential: `trinity-cli login muse` runs `muse-web-cli credential`, which logs in when needed and writes the gateway token only to `~/.trinity-cli/muse-credential` (mode 600), never printing it. That file is a token; do not share or commit it. An expired token is reported as 登入工作階段已失效 ("login session expired"); sign in again in Chrome and rerun. `--api-key` still passes a key from stdin to `muse auth set --api-key-stdin`. See the [muse-web-cli troubleshooting](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#troubleshooting) section.
 4. Several Grok seats are keyed by login label plus bot name. `grok` means `grok_default`. Fake values:
 
@@ -671,7 +683,7 @@ Before a Muse read or send, trinity calls `chats`. A side chat is not sent into 
 | Your dot 401 or unusable login | `codex login`. See [chatgpt-dot-cli troubleshooting](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#troubleshooting) |
 | Your dot network or non-200 | Try `chatgpt-dot-cli list` |
 | chatgpt-dot-cli missing | Install it, or set `TRINITY_DOT_CLI` |
-| Several Grok logins | `gbot accounts`, then set `gbot_account`. See [grok-bot-cli Install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#install) |
+| Several Grok logins | `gbot accounts`, then set `gbot_account`. See the [grok-bot-cli install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install) section. |
 | Grok login unusable | Open the Grok Bot app and run `gbot doctor` |
 | gbot missing | Install it, or set `TRINITY_GBOT` |
 | Muse browser down | `muse-web-cli start --headless` |

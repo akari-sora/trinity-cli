@@ -54,6 +54,28 @@ def configure_stdio() -> None:
             continue
 
 
+class _CommandParser(argparse.ArgumentParser):
+    """Accept options between positionals on Python 3.11.
+
+    3.12+ already does this. 3.11 leaves the trailing words as unrecognized
+    arguments, so README examples such as ``hand dot#last --to grok "…"`` fail.
+    ``parse_known_intermixed_args`` calls ``parse_known_args``, so the original
+    method has to stay in place for that call. ``--then`` uses ``REMAINDER`` and
+    cannot be intermixed.
+    """
+
+    def parse_known_args(self, args=None, namespace=None):
+        positionals = self._get_positional_actions()
+        if any(action.nargs in (argparse.PARSER, argparse.REMAINDER) for action in positionals):
+            return argparse.ArgumentParser.parse_known_args(self, args, namespace)
+        saved = argparse.ArgumentParser.parse_known_args
+        try:
+            self.parse_known_args = lambda a=None, n=None: saved(self, a, n)
+            return argparse.ArgumentParser.parse_known_intermixed_args(self, args, namespace)
+        finally:
+            del self.parse_known_args
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="trinity-cli",
@@ -87,7 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--json", action="store_true", help="print JSON instead of text; may appear before or after the command (default: text)")
     parser.add_argument("--version", action="version", version=f"trinity-cli {__version__}")
-    sub = parser.add_subparsers(dest="command")
+    sub = parser.add_subparsers(dest="command", parser_class=_CommandParser)
 
     sub.add_parser(
         "status",

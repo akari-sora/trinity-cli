@@ -31,6 +31,22 @@ test:
     - pip install -e .
     - python -m unittest discover -s tests
 
+# Python 3.11 argparse does not intermix options and positionals. README
+# examples such as `hand … --to … "…"` depend on the parser workaround.
+test:py311:
+  stage: test
+  tags: [grok-box, ondemand, trinity-cli]
+  image: python:3.11-slim
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  cache:
+    key: pip-py3.11
+    paths:
+      - .cache/pip
+  script:
+    - pip install -e .
+    - python -m unittest discover -s tests
+
 # The muse-web-cli that README pins, run for real in a throwaway home with
 # --backend api. No Chrome, no Muse, no secrets. Fails when the pinned tag is missing.
 contract:muse:
@@ -171,13 +187,13 @@ release:
           "- macOS: local development and live checks.",
           "",
           "## Install",
-          "- macOS and Linux: uv or pipx. chatgpt-dot-cli v0.2.2, muse-web-cli v0.1.4, trinity-cli v0.4.3. gbot fork: npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2. Commands are in the README.",
-          "- Windows (PowerShell): irm https://astral.sh/uv/install.ps1 | iex, then the same uv pins. gbot: npm install -g 'git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2'.",
+          "- macOS and Linux: uv or pipx. chatgpt-dot-cli v0.2.2, muse-web-cli v0.1.4, trinity-cli v0.4.4. gbot: download grok-bot-cli-0.11.2.tgz from the v0.11.2-iml1s.2 release and npm install -g that file. Node.js 22.19.0+. Commands are in the README.",
+          "- Windows (PowerShell): irm https://astral.sh/uv/install.ps1 | iex, then the same uv pins. gbot: the same .tgz, then npm install -g .\\grok-bot-cli-0.11.2.tgz. Node.js 22.19.0+.",
           "",
           "## Related projects",
           "- trinity-cli (this repo) — one CLI over three always-on agents: https://gitlab.com/aa22396584/trinity-cli",
           "- chatgpt-dot-cli — ChatGPT Your dot: https://gitlab.com/aa22396584/chatgpt-dot-cli",
-          "- grok-bot-cli (fork, gbot) — Grok Bot: https://gitlab.com/aa22396584/grok-bot-cli (mirror https://github.com/ImL1s/grok-bot-cli)",
+          "- grok-bot-cli (fork, gbot) — Grok Bot: https://gitlab.com/aa22396584/grok-bot-cli",
           "- muse-web-cli — Meta Muse via the web: https://gitlab.com/aa22396584/muse-web-cli",
       ])
       print(text)

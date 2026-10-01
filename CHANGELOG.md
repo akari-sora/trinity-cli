@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.4 - 2026-10-02
+
+- Python 3.11 也能跑 README 裡選項夾在位置參數中間的指令，例如 `hand dot#last --to grok "…"` 和 `ask grok --bot NAME --account LABEL "…"`。3.12 以上本來就可以。CI 加了 Python 3.11 的測試。
+- gbot 的安裝改成下載 v0.11.2-iml1s.2 附的 `grok-bot-cli-0.11.2.tgz` 再 `npm install -g`。`npm install -g git+https://gitlab.com/...` 會結束碼 0，但裝出來的 `gbot` 是斷掉的連結。GitHub 鏡像不對外提供。Node 改成 22.19.0 以上。
+
 ## 0.4.3 - 2026-10-01
 
 - 座位工具釘選：muse-web-cli v0.1.4（修好長聊天室 `send --wait` 等不到回覆、刪改只收列出的聊天室、錯誤欄位一律清掉 token）。chatgpt-dot-cli 仍是 v0.2.2，gbot fork 仍是 v0.11.2-iml1s.2。
