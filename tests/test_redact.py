@@ -133,9 +133,9 @@ class NoSecretsInOutputTests(unittest.TestCase):
         out = io.StringIO()
         main(["digest"], seats=self.seats(dot_world, grok_world), out=out, err=io.StringIO(), state=self.state)
         self.run_all(dot_world, grok_world)
-        stored = self.state.path.read_text() + self.ledger.path.read_text()
+        stored = self.state.path.read_text(encoding="utf-8") + self.ledger.path.read_text(encoding="utf-8")
         self.assertIsNone(TOKEN_LIKE.search(stored))
-        json.loads(self.state.path.read_text())
+        json.loads(self.state.path.read_text(encoding="utf-8"))
 
     def test_dot_seat_never_passes_an_auth_path(self):
         dot_world = DotWorld()

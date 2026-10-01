@@ -49,10 +49,10 @@ class DigestCursorTests(unittest.TestCase):
 
     def test_cursor_not_advanced_when_printing_fails(self):
         self.state.save_cursors({"a.messages": {"id": "m0"}})
-        before = self.state.path.read_text()
+        before = self.state.path.read_text(encoding="utf-8")
         code, _ = self.digest([batch_seat()], out=BrokenOut())
         self.assertEqual(code, 1)
-        self.assertEqual(self.state.path.read_text(), before)
+        self.assertEqual(self.state.path.read_text(encoding="utf-8"), before)
 
     def test_cursor_not_created_when_printing_fails_first_time(self):
         code, _ = self.digest([batch_seat()], out=BrokenOut())

@@ -9,7 +9,7 @@ from pathlib import Path
 from tests.fakes import FAKE_JWT, Clock, FakeRunner, MuseWorld
 from trinity_cli import __version__
 from trinity_cli.cli import main
-from trinity_cli.seats.muse import MuseSeat
+from trinity_cli.seats.muse import MuseSeat, credential_mode_fix
 from trinity_cli.state import Ledger, State
 from trinity_cli.util import has_nonce
 
@@ -48,7 +48,9 @@ class MuseContractTests(unittest.TestCase):
             seat, runner = _seat(world)
             result = seat.status()
             self.assertEqual(result.state, want, state)
-            if hint:
+            if state == "credential_permissions":
+                self.assertEqual(result.hint, credential_mode_fix(), state)
+            elif hint:
                 self.assertEqual(result.hint, hint, state)
             if state != "ok":
                 self.assertNotIn("send", [call[0] for call in world.calls])

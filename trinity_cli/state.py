@@ -60,8 +60,11 @@ class Ledger:
     def append(self, record: dict) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         new = not self.path.exists()
-        with open(self.path, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+        # Binary UTF-8 with a single \n. Windows text mode would turn \n into
+        # \r\n and can split a later read in the middle of a record.
+        line = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
+        with open(self.path, "ab") as handle:
+            handle.write(line)
             handle.flush()
             os.fsync(handle.fileno())
         if new:
@@ -69,7 +72,15 @@ class Ledger:
 
     def records(self) -> list[dict]:
         try:
-            with open(self.path, encoding="utf-8") as handle:
-                return [json.loads(line) for line in handle if line.strip()]
+            raw = self.path.read_bytes()
         except FileNotFoundError:
             return []
+        rows = []
+        for line in raw.decode("utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                raise json.JSONDecodeError(f"{exc.msg} line={line[:120]!r}", line, exc.pos) from None
+        return rows

@@ -58,7 +58,7 @@ test:windows:
         $env:Path = "$env:UV_INSTALL_DIR;$env:USERPROFILE\.local\bin;" + $env:Path
       }
       uv venv .venv
-      .\.venv\Scripts\python.exe -m pip install -e .
+      uv pip install -e . --python .\.venv\Scripts\python.exe
       .\.venv\Scripts\python.exe -m unittest discover -s tests
 
 release:
