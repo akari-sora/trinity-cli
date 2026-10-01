@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.3 - 2026-10-01
+
+- 座位工具釘選：muse-web-cli v0.1.4（修好長聊天室 `send --wait` 等不到回覆、刪改只收列出的聊天室、錯誤欄位一律清掉 token）。chatgpt-dot-cli 仍是 v0.2.2，gbot fork 仍是 v0.11.2-iml1s.2。
+- `login muse` 遇到 `session_expired` 時照 muse-web-cli 的說法回報：token 被拒是「登入工作階段已失效」，真的沒登入才是「尚未登入」。下一步都是在 Chrome 登入後再跑 `trinity-cli login muse`。
+- 文件與提示改成和行為一致：Muse 預設走 browser；`--muse-backend api` 是 gateway，讀 `~/.trinity-cli/muse-credential`；這個檔只由 `login muse` 寫入（mode 600、不印出），固定在家目錄，不跟 `TRINITY_HOME`。
+- 更正 0.3.3 的紀錄：那版的 `login muse` 是 `muse login`，不寫憑證檔。寫憑證檔是 0.4.1 才加的。
+- CI：新增 `contract:muse`，安裝 README 釘的 muse-web-cli，在暫時的家目錄跑真的二進位（不連 Muse、不需要秘密），確認版本、`credential` 子命令，以及缺憑證、憑證壞掉、權限不對時的結束碼。標籤流水線會檢查標籤是 `v` 加 `pyproject.toml` 的版本，而且 CHANGELOG 那一節已經不是 Unreleased。測試會檢查 README、CI 發佈說明、`pyproject.toml` 的版本與釘選一致。
+
 ## 0.4.2
 
 - `login muse` 只在 `session_expired`，或尚未登入且狀態是 ok／空白時，才提示去登入。地區限制、瀏覽器打不開、設定檔忙碌保留原本的 hint。
@@ -12,6 +20,8 @@
 - `auto` 先試 api。某個能力回 exit 4 才改走 browser，而且會標出實際用的是哪一個。`send` 逾時不改走另一個 backend，避免送第二次。
 - `status` 和 `who` 會寫出正在用的 backend。`schedules` 同時讀 `upcoming` 和 `activity`。`digest --no-activity` 會略過 Muse 的 activity。
 - 地區限制、瀏覽器設定檔忙碌、頁面結構對不上，都有固定的修復提示。核准卡片不算等得到的回覆。
+- `trinity-cli login muse` 改成執行 `muse-web-cli credential`：沒登入就先走現有登入，再把 gateway token 寫進 `~/.trinity-cli/muse-credential`（mode 600），不印出。`--api-key` 仍把標準輸入交給 `muse auth set --api-key-stdin`。`--web` 仍是 `muse-web-cli login`。api 後端缺憑證時，status 改提示這條。
+- 已知問題：這版仍釘 muse-web-cli v0.1.2，那版沒有 `credential`，所以照 README 安裝時 `login muse` 會失敗。0.4.2 改釘 v0.1.3 修正。
 
 ## 0.4.0
 
@@ -27,7 +37,7 @@
 - 座位工具釘在 `chatgpt-dot-cli` v0.2.2、gbot fork v0.11.2-iml1s.2、`muse-web-cli` v0.1.2。
 - 平行寫入帳本時整行加鎖。Windows 上同時 append 不會把兩筆 JSON 寫成交錯的一行。
 - Muse 仍預設走 browser。backend 由 muse-web-cli 的 `--backend`、`MUSE_WEB_BACKEND` 或它自己的設定檔決定，trinity 不傳 `--backend`。使用者改成 api 且該能力不支援時，每個能力分開回報不支援，不會讓整支指令當掉。
-- `trinity-cli login muse` 執行 `muse-web-cli credential`：沒登入就先走現有登入，再把 gateway 憑證寫進 `~/.trinity-cli/muse-credential`（mode 600），不印 token。`--api-key` 仍把標準輸入交給 `muse auth set --api-key-stdin`。`--web` 仍是 `muse-web-cli login`。api 後端缺憑證時，status 改提示這條。
+- `trinity-cli login muse` 執行公開的 `muse login`（瀏覽器核准）。`--api-key` 把標準輸入交給 `muse auth set --api-key-stdin`。`--web` 才是 `muse-web-cli login`。trinity 不讀、不印、不複製憑證，也不寫入 `~/.trinity-cli/muse-credential`。api 後端缺憑證時，status 改提示這條。
 - 用法說明改成中英完整對照：安裝、第一次設定、每個指令和旗標、`--json` 欄位、結束碼、檔案與安全界線。`--help` 每個指令和旗標都有預設值或範圍。
 - Windows 與 Linux：用 `shutil.which` 找工具（含 `gbot.cmd`），參數用清單、不用 shell；子程序輸出以 UTF-8 解碼；逾時在 Windows 用 `taskkill /T`。狀態、帳本、設定在 `TRINITY_HOME` 或家目錄的 `.trinity-cli`，寫入用 `os.replace`。
 - CI：Linux 仍走 grok-box；Windows 走 GitLab 代管的 `saas-windows-medium-amd64`（只跑離線測試）。標籤流水線會附上各系統安裝方式、相關專案連結，並上傳 wheel 與 sdist。

@@ -13,7 +13,8 @@ digest can say 可能漏看.
 
 `instructions` stays on the base class: Muse has no instruction API, so
 `brief push` prints a draft. `memory` is read-only and only used by `brief diff`.
-muse-web-cli v0.1.3 accepts `--backend browser|api`. trinity passes it when a
+muse-web-cli accepts `--backend browser|api` (default browser; api is the
+gateway and reads ~/.trinity-cli/muse-credential). trinity passes it when a
 choice is resolved: CLI `--muse-backend`, then config `muse_backend`, then
 `MUSE_WEB_BACKEND`. With no choice, trinity omits `--backend`. `auto` tries api
 first and, on exit 4, retries that capability on browser. A send that timed out
@@ -52,8 +53,8 @@ FIX_LOGIN = "muse-web-cli login"
 FIX_START = "muse-web-cli start --headless"
 FIX_TOKEN = (
     "執行 `trinity-cli login muse`。"
-    "它會呼叫 `muse-web-cli credential`，把已登入的 Muse 寫進 ~/.trinity-cli/muse-credential（mode 600）。"
-    "不讀、不印 token。金鑰用 `trinity-cli login muse --api-key`。"
+    "它會呼叫 `muse-web-cli credential`，把已登入 Muse 的 gateway token 只寫進 ~/.trinity-cli/muse-credential（mode 600），不印出。"
+    "金鑰用 `trinity-cli login muse --api-key`。"
 )
 def credential_mode_fix() -> str:
     if os.name == "nt":
@@ -68,6 +69,7 @@ _TOKEN_OK = (
 _KEY_OK = "已把標準輸入交給 muse auth set。trinity 沒有保存金鑰。"
 _WEB_OK = "Muse 網頁已登入。接著可以執行 `muse-web-cli start --headless`。"
 _WEB_WAIT = "請在開啟的 Chrome 視窗登入 Muse。這個工具不會輸入帳號密碼。"
+_TOKEN_WAIT = "請在開啟的 Chrome 視窗登入 Muse，完成後再執行 `trinity-cli login muse`。這個工具不會輸入帳號密碼。"
 FIRST_READ = 10
 MESSAGE_LIMIT = 40
 LIMIT_MAX = 100
@@ -279,7 +281,8 @@ class MuseSeat(Seat):
             listed = "、".join(names) if names else "憑證欄位"
             return Result.ok(f"{_TOKEN_OK} 有值的欄位：{listed}。")
         if state == "session_expired" or (payload.get("logged_in") is False and state in {"", "ok"}):
-            return Result.failed("尚未登入。", "請在開啟的 Chrome 視窗登入 Muse。這個工具不會輸入帳號密碼。")
+            error = payload.get("error") if isinstance(payload.get("error"), str) and payload.get("error") else "尚未登入。"
+            return Result.failed(error, _TOKEN_WAIT)
         if not payload and proc.code != 0:
             return Result.failed("沒有寫入 ~/.trinity-cli/muse-credential。", "再執行一次 `trinity-cli login muse`")
         problem = self._problem(proc, payload)

@@ -14,7 +14,7 @@
 - Grok Bot：`gbot --json`（這個 fork）
 - Muse：`muse-web-cli --json --autostart`
 
-它不讀 `~/.codex/auth.json`、Grok Bot app 的登入，或 Muse 的 cookie。`login` 只轉給那些工具既有的公開指令，不印、不複製憑證。
+它不讀 `~/.codex/auth.json`、Grok Bot app 的登入，或 Muse 的 cookie。`login` 只轉給那些工具既有的公開指令，不印憑證。唯一會存下 token 的是 `login muse`：它叫 `muse-web-cli credential` 把 Muse gateway token 只寫進 `~/.trinity-cli/muse-credential`（mode 600），給 `--muse-backend api` 用。trinity 自己不讀、不印這個檔。
 
 支援的系統：Linux（CI）、Windows（CI）、macOS（本機與實機檢查）。
 
@@ -35,15 +35,15 @@
 
 ### 安裝
 
-v0.4.2 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下。
+v0.4.3 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下：應印出 `muse-web-cli 0.1.4`、`trinity-cli 0.4.3`。舊的 muse-web-cli v0.1.2 沒有 `credential` 和 api gateway；v0.1.3 的 `send --wait` 在長聊天室會等不到回覆。
 
 macOS 與 Linux（需要 Python 3.11+；Grok 還要 Node 18+）：
 
 ```bash
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
 npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.3"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -59,8 +59,8 @@ irm https://astral.sh/uv/install.ps1 | iex
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
 npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.3"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -86,7 +86,7 @@ npm uninstall -g grok-bot-cli
 
 1. Your dot：`codex login`。401 時再跑一次。也可以 `trinity-cli login dot`。多個 dot 時設 `TRINITY_DOT_ID`。細節見 [chatgpt-dot-cli 疑難排解](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#疑難排解)。
 2. Grok Bot：打開 Grok Bot app 登入。`trinity-cli login grok` 只會重複這句，不會讀那個登入。有多個登入時先跑 `gbot accounts`，把要的標籤寫進設定。細節見 [grok-bot-cli Install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#install)。
-3. Muse 網頁：`muse-web-cli login`（看得到的視窗），完成後 `muse-web-cli start --headless`。或 `trinity-cli login muse --web`。api 憑證：`trinity-cli login muse` 會執行 `muse-web-cli credential`，沒登入就先走登入，再寫入 `~/.trinity-cli/muse-credential`（mode 600），不印 token。`--api-key` 仍把金鑰從標準輸入交給 `muse auth set --api-key-stdin`。細節見 [muse-web-cli 排解](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#排解)。
+3. Muse 預設走網頁（browser 後端）：`muse-web-cli login`（看得到的視窗），完成後 `muse-web-cli start --headless`。或 `trinity-cli login muse --web`。api 後端（`--muse-backend api`，走 Muse gateway）要憑證：`trinity-cli login muse` 會執行 `muse-web-cli credential`，沒登入就先走登入，再把 gateway token 只寫進 `~/.trinity-cli/muse-credential`（mode 600），不印出。這個檔是 token，不要分享或提交。token 過期時會說「登入工作階段已失效」，在 Chrome 重新登入後再跑一次。`--api-key` 仍把金鑰從標準輸入交給 `muse auth set --api-key-stdin`。細節見 [muse-web-cli 排解](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#排解)。
 4. 多個 Grok 座位用登入標籤加 bot 名稱。`grok` 指向 `grok_default`。假值：
 
 ```json
@@ -290,7 +290,7 @@ trinity-cli ask all "問全部"
 
 ### 概念
 
-三個座位的能力不一樣。沒有的能力會明白寫「不支援」，結束碼仍是 0，不會連帶讓別的座位失敗。`muse-web-cli` v0.1.3 的預設仍是 browser。trinity 會傳 `--backend`：`--muse-backend` 優先於設定檔的 `muse_backend`，再來是 `MUSE_WEB_BACKEND`。三個都沒寫就不傳，交給 muse-web-cli 自己的預設。值是 `browser`、`api` 或 `auto`。`auto` 先試 api，該能力若是 exit 4 才改走 browser，並標出實際用的後端。`send` 逾時不會改走另一個後端。api 有能力不支援且沒有 fallback 時，那個能力單獨標不支援，不會讓 trinity 當掉。Muse 沒有指令 API。Grok 群組只在 `ask grok <群組>` 和 `hand`／`wait` 的 `grok:<名字>` 可用；`status` 和 `digest` 只看 bot。
+三個座位的能力不一樣。沒有的能力會明白寫「不支援」，結束碼仍是 0，不會連帶讓別的座位失敗。`muse-web-cli` 的預設是 browser；`api` 走 Muse gateway，讀 `~/.trinity-cli/muse-credential`。trinity 會傳 `--backend`：`--muse-backend` 優先於設定檔的 `muse_backend`，再來是 `MUSE_WEB_BACKEND`。三個都沒寫就不傳，交給 muse-web-cli 自己的預設。值是 `browser`、`api` 或 `auto`。`auto` 先試 api，該能力若是 exit 4 才改走 browser，並標出實際用的後端。`send` 逾時不會改走另一個後端。api 有能力不支援且沒有 fallback 時，那個能力單獨標不支援，不會讓 trinity 當掉。Muse 沒有指令 API。Grok 群組只在 `ask grok <群組>` 和 `hand`／`wait` 的 `grok:<名字>` 可用；`status` 和 `digest` 只看 bot。
 
 讀取位置在 `state.json` 的 `cursors`，Grok 依座位分開（例如 `grok-a.messages`）。只有 `digest` 把輸出印完才前進。`--peek`、`--since`、`hand`、`wait` 都不動。對不上上次的結尾時標「可能漏看」。一個 Grok 座位不可達時，其他座位照常；那個座位標成失敗，並附上重新登入的提示。
 
@@ -317,6 +317,7 @@ Muse 在讀和送之前先看 `chats`。目前是副聊天室時不送出，也�
 | Muse 瀏覽器沒起來 | `muse-web-cli start --headless` |
 | Muse 網頁登入失效 | `muse-web-cli login`。見 [muse-web-cli 排解](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#排解) |
 | Muse api 缺憑證 | `trinity-cli login muse` |
+| Muse api 登入工作階段已失效 | 在 Chrome 視窗重新登入 Muse，再 `trinity-cli login muse` |
 | Muse 憑證檔權限 | macOS／Linux：`chmod 600 ~/.trinity-cli/muse-credential`。Windows：`icacls` 只給目前使用者讀 |
 | Muse 在副聊天室 | 在 Muse 視窗切回主聊天室 |
 | Muse 瀏覽器設定檔忙碌 | 先關掉那個視窗，再執行 `muse-web-cli start --headless` |
@@ -333,6 +334,8 @@ Muse 在讀和送之前先看 `chats`。目前是副聊天室時不送出，也�
 | `state.json` | 讀取位置。沒有密鑰 |
 | `ledger.jsonl` | 每次送出 |
 | `brief.md` | 本機 brief |
+
+`~/.trinity-cli/muse-credential` 固定在家目錄，不跟 `TRINITY_HOME`。它是 Muse gateway 的 token，mode 600，由 `login muse`（`muse-web-cli credential`）寫入，只有 `muse-web-cli --backend api` 會讀。trinity 不讀、不印它。
 
 | 變數 | 用途 |
 | --- | --- |
@@ -371,7 +374,7 @@ skill 在 `skills/trinity-cli/SKILL.md`。目錄已經存在時再連過去，�
 - Grok Bot: `gbot --json` (this fork)
 - Muse: `muse-web-cli --json --autostart`
 
-It does not read `~/.codex/auth.json`, the Grok Bot app session, or Muse cookies. `login` only hands off to those public CLIs and does not print or copy a credential.
+It does not read `~/.codex/auth.json`, the Grok Bot app session, or Muse cookies. `login` only hands off to those public CLIs and does not print a credential. The one login that stores a token is `login muse`: it has `muse-web-cli credential` write the Muse gateway token only to `~/.trinity-cli/muse-credential` (mode 600) for `--muse-backend api`. trinity itself never reads or prints that file.
 
 Supported systems: Linux (CI), Windows (CI), and macOS (local use and live checks).
 
@@ -392,15 +395,15 @@ Supported systems: Linux (CI), Windows (CI), and macOS (local use and live check
 
 ### Install
 
-v0.4.2 pins these versions. After installing trinity and each seat tool, check every `--version`.
+v0.4.3 pins these versions. After installing trinity and each seat tool, check every `--version`: expect `muse-web-cli 0.1.4` and `trinity-cli 0.4.3`. The older muse-web-cli v0.1.2 has no `credential` and no api gateway; v0.1.3's `send --wait` can miss the reply in a long chat.
 
 macOS and Linux (Python 3.11+; Grok also needs Node 18+):
 
 ```bash
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
 npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.3"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -416,8 +419,8 @@ irm https://astral.sh/uv/install.ps1 | iex
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
 npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.3"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -443,7 +446,7 @@ npm uninstall -g grok-bot-cli
 
 1. Your dot: `codex login`. Run it again on a 401. `trinity-cli login dot` does the same. Set `TRINITY_DOT_ID` when the account has more than one dot. See the [chatgpt-dot-cli troubleshooting](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#troubleshooting) section.
 2. Grok Bot: sign in with the Grok Bot app. `trinity-cli login grok` only repeats that; it does not read the session. When several logins exist, run `gbot accounts` and save the label. See the [grok-bot-cli Install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#install) section.
-3. Muse in the browser: `muse-web-cli login` in a visible window, then `muse-web-cli start --headless`. Or `trinity-cli login muse --web`. The api credential is `trinity-cli login muse`, which runs `muse-web-cli credential`: it logs in when needed and writes `~/.trinity-cli/muse-credential` (mode 600) without printing the token. `--api-key` still passes a key from stdin to `muse auth set --api-key-stdin`. See the [muse-web-cli troubleshooting](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#troubleshooting) section.
+3. Muse defaults to the browser backend: `muse-web-cli login` in a visible window, then `muse-web-cli start --headless`. Or `trinity-cli login muse --web`. The api backend (`--muse-backend api`, the Muse gateway) needs a credential: `trinity-cli login muse` runs `muse-web-cli credential`, which logs in when needed and writes the gateway token only to `~/.trinity-cli/muse-credential` (mode 600), never printing it. That file is a token; do not share or commit it. An expired token is reported as 登入工作階段已失效 ("login session expired"); sign in again in Chrome and rerun. `--api-key` still passes a key from stdin to `muse auth set --api-key-stdin`. See the [muse-web-cli troubleshooting](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#troubleshooting) section.
 4. Several Grok seats are keyed by login label plus bot name. `grok` means `grok_default`. Fake values:
 
 ```json
@@ -647,7 +650,7 @@ trinity-cli ask all "ask every seat"
 
 ### Concepts
 
-The seats do not have the same capabilities. A missing one is reported as unsupported, still exit 0, and does not fail the others. `muse-web-cli` v0.1.3 still defaults to the browser backend. trinity passes `--backend`: `--muse-backend` wins over config `muse_backend`, which wins over `MUSE_WEB_BACKEND`. With none of those set, trinity omits `--backend` and muse-web-cli keeps its own default. The value is `browser`, `api`, or `auto`. `auto` tries api first and uses browser for a capability only when that call exits 4, and the line names the backend that served it. A timed-out `send` is not tried on the other backend. An unsupported api capability with no fallback is reported on its own and trinity does not crash. Muse has no instruction API. Grok groups work with `ask grok <group>` and `grok:<name>` on `hand` / `wait`; `status` and `digest` cover bots only.
+The seats do not have the same capabilities. A missing one is reported as unsupported, still exit 0, and does not fail the others. `muse-web-cli` defaults to the browser backend; `api` is the Muse gateway and reads `~/.trinity-cli/muse-credential`. trinity passes `--backend`: `--muse-backend` wins over config `muse_backend`, which wins over `MUSE_WEB_BACKEND`. With none of those set, trinity omits `--backend` and muse-web-cli keeps its own default. The value is `browser`, `api`, or `auto`. `auto` tries api first and uses browser for a capability only when that call exits 4, and the line names the backend that served it. A timed-out `send` is not tried on the other backend. An unsupported api capability with no fallback is reported on its own and trinity does not crash. Muse has no instruction API. Grok groups work with `ask grok <group>` and `grok:<name>` on `hand` / `wait`; `status` and `digest` cover bots only.
 
 Cursors live in `cursors` inside `state.json`, and each Grok seat has its own key (for example `grok-a.messages`). Only `digest` moves them, and only after the output was printed. `--peek`, `--since`, `hand`, and `wait` do not. When the previous tail is gone, the timeline says 可能漏看 ("possibly missed"). One unreachable Grok seat does not stop the others; that seat is a failure with the re-login hint.
 
@@ -674,6 +677,7 @@ Before a Muse read or send, trinity calls `chats`. A side chat is not sent into 
 | Muse browser down | `muse-web-cli start --headless` |
 | Muse browser session expired | `muse-web-cli login`. See [muse-web-cli troubleshooting](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#troubleshooting) |
 | Muse api credential missing | `trinity-cli login muse` |
+| Muse api login session expired | Sign in to Muse again in the Chrome window, then `trinity-cli login muse` |
 | Muse credential file mode | macOS/Linux: `chmod 600 ~/.trinity-cli/muse-credential`. Windows: `icacls` so only the current user can read it |
 | Muse on a side chat | Switch back to the main chat in the Muse window |
 | Muse profile busy | Quit that window, then `muse-web-cli start --headless` |
@@ -690,6 +694,8 @@ Data lives in `TRINITY_HOME`, or `.trinity-cli` under the home directory when th
 | `state.json` | Cursors. No secrets |
 | `ledger.jsonl` | Every send |
 | `brief.md` | The local brief |
+
+`~/.trinity-cli/muse-credential` always lives under the home directory, not `TRINITY_HOME`. It holds the Muse gateway token, mode 600, written by `login muse` (`muse-web-cli credential`) and read only by `muse-web-cli --backend api`. trinity never reads or prints it.
 
 | Variable | Use |
 | --- | --- |

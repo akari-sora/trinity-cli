@@ -40,7 +40,7 @@ def _argv(runner):
 
 class MuseContractTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(__version__, "0.4.2")
+        self.assertEqual(__version__, "0.4.3")
 
     def test_each_exit_state_on_status(self):
         for state, want, hint in _STATES:
@@ -67,8 +67,9 @@ class MuseContractTests(unittest.TestCase):
         self.assertEqual(result.state, "failed")
         self.assertIn("trinity-cli login muse", result.hint)
         self.assertIn("muse-web-cli credential", result.hint)
-        self.assertIn("不讀", result.hint)
-        self.assertIn("不印", result.hint)
+        self.assertIn("mode 600", result.hint)
+        self.assertIn("不印出", result.hint)
+        self.assertNotIn("不讀", result.hint)
         self.assertNotIn("muse-web-cli login", result.hint)
 
     def test_api_backend_reports_each_unsupported_capability(self):

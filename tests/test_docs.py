@@ -1,9 +1,13 @@
 """Help text and docs stay aligned with the real parser."""
 
+import re
+import tomllib
 import unittest
 from pathlib import Path
 
+from trinity_cli import __version__
 from trinity_cli.cli import build_parser
+from trinity_cli.seats.muse import FIX_TOKEN
 
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -60,6 +64,31 @@ class DocsDriftTests(unittest.TestCase):
         self.assertIn("chatgpt-dot-cli", SKILL)
         self.assertIn("muse-web-cli", SKILL)
         self.assertIn("gbot --help", SKILL)
+
+    def test_version_pins_agree_across_readme_ci_and_changelog(self):
+        version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+        self.assertEqual(__version__, version)
+        lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+        self.assertIn(f'name = "trinity-cli"\nversion = "{version}"', lock)
+        newest = re.search(r"^## (\S+)", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), re.M)
+        self.assertEqual(newest.group(1), version)
+        ci = (ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        for tool in ("trinity-cli", "muse-web-cli", "chatgpt-dot-cli"):
+            pins = set(re.findall(rf"{tool}\.git@v([^\"\s]+)", README))
+            self.assertEqual(len(pins), 1, f"{tool} {sorted(pins)}")
+            self.assertIn(f"{tool} v{next(iter(pins))}", ci, tool)
+        self.assertEqual(set(re.findall(r"trinity-cli\.git@v([^\"\s]+)", README)), {version})
+        self.assertEqual(README.count(f"v{version} 釘這些版本"), 1)
+        self.assertEqual(README.count(f"v{version} pins these versions"), 1)
+
+    def test_docs_say_login_muse_stores_the_gateway_token(self):
+        for text in (README, SKILL):
+            self.assertIn("~/.trinity-cli/muse-credential", text)
+            self.assertIn("mode 600", text)
+        for stale in ("不印、不複製憑證", "does not print or copy a credential", "不讀、不印 token"):
+            self.assertNotIn(stale, README)
+        self.assertNotIn("不讀、不印 token", FIX_TOKEN)
+        self.assertIn("mode 600", FIX_TOKEN)
 
 
 if __name__ == "__main__":

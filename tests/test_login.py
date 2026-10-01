@@ -196,6 +196,27 @@ class OtherSeatLoginTests(unittest.TestCase):
         self.assertIn("佔用", text)
         self.assertNotIn("尚未登入", err)
 
+    def test_expired_token_is_not_reported_as_never_logged_in(self):
+        payload = {
+            "state": "session_expired",
+            "logged_in": False,
+            "wrote": False,
+            "error": "登入工作階段已失效。",
+            "hint": "請在開啟的 Chrome 視窗重新登入 Muse。",
+        }
+        code, text, _ = _run([_seat(payload, code=2)], "login", "muse")
+        self.assertEqual(code, 1)
+        self.assertIn("登入工作階段已失效", text)
+        self.assertNotIn("尚未登入", text)
+        self.assertIn("trinity-cli login muse", text)
+
+    def test_session_expired_without_an_error_says_not_logged_in(self):
+        payload = {"state": "session_expired", "logged_in": False, "wrote": False}
+        code, text, _ = _run([_seat(payload, code=2)], "login", "muse")
+        self.assertEqual(code, 1)
+        self.assertIn("尚未登入", text)
+        self.assertIn("Chrome 視窗", text)
+
     def test_login_error_scrubs_token_shapes(self):
         secret = "unit-secret-value"
         payload = {
