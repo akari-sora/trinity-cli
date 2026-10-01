@@ -333,6 +333,8 @@ def run_wait(
     seat = _find(seats, seat_key)
     if seat is None:
         return Shown(2, f"沒有 {seat_key} 這個座位。", {"state": "error", "error": "unknown seat"})
+    if target is None:
+        target = getattr(seat, "default_bot", None) or None
     if not seat.supports("read"):
         reason = seat.unsupported_reason
         return Shown(0, f"– {_label(seat, target)}：{reason}", {"state": "unsupported", "seat": seat.key, "error": reason, "sent": False})

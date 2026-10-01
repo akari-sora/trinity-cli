@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Grok 的文字回覆是 `send-message`（`message.type` 為 `text`），不是 `role: assistant`。0.3.0 因此把已經送到的回覆看成沒有回覆。現在這種條目算 bot 說的；核准卡片仍不算。時間欄位 `timestampMs` 也會讀。
+- `~/.trinity-cli/config.json` 的 `grok_bot`（或 `TRINITY_GROK_BOT`）是 `ask`、`hand`、`wait`、`brief` 的預設 bot。`ask grok "一句話"` 整句都是訊息。
+- 還沒有 `brief.md` 時，`brief diff` 結束碼 0，並提示 `brief init`。`brief init` 只在檔案不存在時寫一份短模板。
+
 ## 0.3.0
 
 第一個公開版本。

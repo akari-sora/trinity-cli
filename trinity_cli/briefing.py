@@ -71,10 +71,34 @@ def run_show(path: Path) -> Shown:
     return Shown(0, f"{path}\n\n{text.rstrip()}", {"path": str(path), "text": text})
 
 
+_TEMPLATE = """# brief
+
+這份說明是你希望各座位記住的共同背景。
+`brief push` 只在有指令 API 的座位寫入（目前是 Grok），而且會先問過你。
+Your dot 和 Muse 沒有指令 API，push 只會印出草稿。
+
+"""
+
+
+def run_init(path: Path) -> Shown:
+    if path.exists():
+        return Shown(0, f"brief 已經存在，沒有覆寫：{path}", {"path": str(path), "created": False})
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_TEMPLATE, encoding="utf-8")
+    except OSError as exc:
+        return Shown(1, f"寫不了 brief：{exc}", {"path": str(path), "created": False, "error": str(exc)})
+    return Shown(0, f"已建立 {path}", {"path": str(path), "created": True})
+
+
 def run_diff(seats, path: Path, *, grok_bot: str | None = None) -> Shown:
     text, error = _read(path)
     if error == "missing":
-        return Shown(2, f"還沒有 brief，無法比較：{path}", {"path": str(path), "missing": True})
+        return Shown(
+            0,
+            f"還沒有 brief：{path}\n建立一份：`trinity-cli brief init`，或直接編輯這個檔案。",
+            {"path": str(path), "missing": True},
+        )
     if error:
         return Shown(1, f"讀不到 brief：{error}", {"path": str(path), "error": error})
     lines = [str(path), ""]

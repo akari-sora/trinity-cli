@@ -8,7 +8,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from trinity_cli.config import clean_account, configured_gbot_account
+from trinity_cli.config import clean_account, configured_gbot_account, configured_grok_bot
 from trinity_cli.model import (
     Batch,
     InstructionText,
@@ -56,7 +56,7 @@ BEFORE_SEND = (
     "cursor_access_token",
     "ensuresandbox returned no",
 )
-TIME_KEYS = ("createdAt", "created_at", "timestamp", "time", "ts", "sentAt", "sent_at", "updatedAt", "updated_at")
+TIME_KEYS = ("createdAt", "created_at", "timestampMs", "timestamp", "time", "ts", "sentAt", "sent_at", "updatedAt", "updated_at")
 
 
 def _text(value: object) -> str:
@@ -81,8 +81,16 @@ def entry_text(entry: dict) -> str:
 
 
 def entry_role(entry: dict) -> str:
-    """user / assistant / unknown, by the same explicit-role rule as `gbot --normalized`."""
+    """user / assistant / unknown.
+
+    `gbot --normalized` only keeps an explicit user/assistant role. Bot replies on
+    this gateway are a following `{kind: "send-message", message: {type: "text"}}`
+    entry, which that rule calls unknown. Approval cards use another message type
+    and stay unknown so they are not treated as the reply.
+    """
     nested = entry.get("message") if isinstance(entry.get("message"), dict) else {}
+    if entry.get("kind") == "send-message" and nested.get("type") == "text":
+        return "assistant"
     roles = {
         value
         for value in (nested.get("type"), nested.get("role"), entry.get("role"), entry.get("kind"), entry.get("type"))
@@ -181,7 +189,7 @@ class GrokSeat(Seat):
     ):
         self.runner = runner or Runner()
         self.binary = binary if binary is not None else find_tool("gbot", "TRINITY_GBOT", GBOT_FALLBACKS)
-        self.default_bot = default_bot or os.environ.get("TRINITY_GROK_BOT") or None
+        self.default_bot = default_bot or configured_grok_bot()
         wanted = only_bots if only_bots is not None else os.environ.get("TRINITY_GROK_BOTS", "").split(",")
         self.only_bots = [name.strip() for name in wanted if name.strip()]
         self.account = configured_gbot_account() if account is None else clean_account(account)
@@ -530,7 +538,7 @@ class GrokSeat(Seat):
                 )
                 if index is not None:
                     delivered = True
-                    reply = next((m for m in messages[index + 1 :] if m.from_agent), None)
+                    reply = next((m for m in messages[index + 1 :] if m.from_agent and m.text.strip()), None)
                     if reply:
                         return Result.ok(WaitOutcome(True, reply, False, polls))
                 elif delivered is None:

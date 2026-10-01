@@ -21,7 +21,7 @@ from trinity_cli.app import (
     status_exit,
     status_json,
 )
-from trinity_cli.briefing import run_diff, run_push, run_show
+from trinity_cli.briefing import run_diff, run_init, run_push, run_show
 from trinity_cli.forward import run_hand, run_wait
 from trinity_cli.ledger_view import run_log
 from trinity_cli.redact import scrub
@@ -95,9 +95,10 @@ def build_parser() -> argparse.ArgumentParser:
     who = sub.add_parser("who", help="suggest a seat for a task; sends nothing")
     who.add_argument("task", nargs="*", help="what you want done")
 
-    brief = sub.add_parser("brief", help="show, diff, or push the local brief")
+    brief = sub.add_parser("brief", help="show, diff, init, or push the local brief")
     brief_sub = brief.add_subparsers(dest="brief_command")
     brief_sub.add_parser("show", help="print ~/.trinity-cli/brief.md")
+    brief_sub.add_parser("init", help="write a short brief.md only when it does not exist")
     brief_diff = brief_sub.add_parser("diff", help="compare the brief with each seat's instructions")
     brief_diff.add_argument("--grok-bot", help="which Grok bot to compare")
     brief_push = brief_sub.add_parser("push", help="write the brief to a seat that has an instruction API")
@@ -227,6 +228,8 @@ def main(
             bot = getattr(args, "grok_bot", None)
             if args.brief_command == "show":
                 return show(run_show(path), out, as_json)
+            if args.brief_command == "init":
+                return show(run_init(path), out, as_json)
             if args.brief_command == "diff":
                 return show(run_diff(seats, path, grok_bot=bot), out, as_json)
             if args.brief_command == "push":
@@ -235,7 +238,7 @@ def main(
                     out,
                     as_json,
                 )
-            print("請用 brief show、brief diff 或 brief push。", file=err)
+            print("請用 brief show、brief init、brief diff 或 brief push。", file=err)
             return 2
         if command == "log":
             return show(run_log(book, seat=args.seat, since=args.since, status=args.status, limit=args.limit), out, as_json)
@@ -276,7 +279,9 @@ def cmd_digest(seats, args, out, err, state: State, as_json: bool) -> int:
 def cmd_ask(seats, args, out, err, ledger: Ledger, stdin, as_json: bool) -> int:
     words = list(args.words)
     bot = args.grok_bot
-    if args.seat == "grok" and not bot and words:
+    # `ask grok 蝴蝶 "..."` names the bot. One quoted argument is the message,
+    # and the configured grok_bot (or the only bot) is the target.
+    if args.seat == "grok" and not bot and len(words) >= 2:
         bot = words.pop(0)
     text = " ".join(words).strip()
     if not text and not stdin.isatty():

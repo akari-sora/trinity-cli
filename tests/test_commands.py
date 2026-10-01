@@ -197,6 +197,21 @@ class BriefTests(unittest.TestCase):
         self.assertIn("沒有指令 API", text)
         self.assertNotIn("send", world and [])
 
+    def test_missing_diff_exits_zero_and_init_writes_once(self):
+        code, text, _ = self.invoke([unsupported_muse()], "brief", "diff")
+        self.assertEqual(code, 0)
+        self.assertIn("還沒有 brief", text)
+        self.assertIn("brief init", text)
+        code, text, _ = self.invoke([unsupported_muse()], "brief", "init")
+        self.assertEqual(code, 0)
+        self.assertTrue(self.path.is_file())
+        first = self.path.read_text(encoding="utf-8")
+        self.assertIn("brief", first)
+        code, text, _ = self.invoke([unsupported_muse()], "brief", "init")
+        self.assertEqual(code, 0)
+        self.assertIn("沒有覆寫", text)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), first)
+
     def test_show_and_missing_file(self):
         code, text, _ = self.invoke([unsupported_muse()], "brief", "show")
         self.assertEqual(code, 0)

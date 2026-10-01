@@ -74,6 +74,59 @@ class TimeoutNeverResendsTests(AskTestCase):
         self.assertIn("⏱ 等了 20 秒沒有回覆，沒有重送", text)
         self.assertEqual(self.ledger.records()[-1]["readback"], "confirmed")
 
+    def test_send_message_text_is_the_reply_and_an_approval_card_is_not(self):
+        user = {
+            "id": "u1",
+            "kind": "message",
+            "role": "user",
+            "content": "請只回一句。\n\n[trinity abc123]",
+            "timestampMs": 1_700_000_001_000,
+        }
+        approval = {
+            "id": "a1",
+            "kind": "send-message",
+            "message": {"type": "auto-review-approval", "approval": {"status": "pending", "command": "noop"}},
+            "timestampMs": 2_000,
+        }
+        empty = {"id": "m1", "kind": "message", "role": "assistant", "content": "  ", "timestampMs": 3_000}
+        reply = {
+            "id": "s1",
+            "kind": "send-message",
+            "message": {"type": "text", "content": "收到"},
+            "timestampMs": 1_700_000_009_600,
+        }
+        world = GrokWorld(transcripts={BOT_ID: [user, approval, empty, reply]})
+        seat = self.grok(world)
+        receipt = SendReceipt("Grok Bot/蝴蝶", BOT_ID, "abc123", datetime.now(timezone.utc), "unknown")
+        result = seat.wait(receipt, timeout=5, poll=1)
+        self.assertEqual(result.state, "ok")
+        self.assertTrue(result.value.delivered)
+        self.assertFalse(result.value.timed_out)
+        self.assertEqual(result.value.reply.text, "收到")
+        self.assertEqual(result.value.reply.at, datetime.fromtimestamp(1_700_000_009_600 / 1000, timezone.utc))
+        self.assertEqual(result.value.polls, 1)
+
+    def test_quoted_ask_uses_the_configured_bot(self):
+        import os
+
+        world = GrokWorld(bots=[{"id": BOT_ID, "name": "Main", "kind": "bot"}, {"id": "b2", "name": "Two", "kind": "bot"}])
+        seat = self.grok(world)
+        old = os.environ.get("TRINITY_GROK_BOT")
+        os.environ["TRINITY_GROK_BOT"] = "Main"
+        try:
+            seat.default_bot = "Main"
+            code, text = self.ask([seat], "grok", "請只回一句", "--timeout", "0", "--poll", "1")
+        finally:
+            if old is None:
+                os.environ.pop("TRINITY_GROK_BOT", None)
+            else:
+                os.environ["TRINITY_GROK_BOT"] = old
+        self.assertEqual(code, 1)
+        self.assertEqual(len(world.sent), 1)
+        self.assertIn("沒有重送", text)
+        send = next(call for call in seat.runner.calls if "send" in call["argv"] and "--help" not in call["argv"])
+        self.assertIn("Main", send["argv"])
+
     def test_dot_timeout_never_resends(self):
         world = DotWorld()
         seat = self.dot(world)

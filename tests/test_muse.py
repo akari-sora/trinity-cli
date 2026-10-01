@@ -39,7 +39,7 @@ def _argv(runner):
 
 class MuseContractTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(__version__, "0.3.0")
+        self.assertEqual(__version__, "0.3.1")
 
     def test_each_exit_state_on_status(self):
         for state, want, hint in _STATES:

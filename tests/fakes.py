@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import tempfile
+
+# Keep a developer's ~/.trinity-cli (account labels, default bot) out of unit tests.
+if not os.environ.get("TRINITY_HOME"):
+    os.environ["TRINITY_HOME"] = tempfile.mkdtemp(prefix="trinity-test-home-")
 
 from trinity_cli.model import Result
 from trinity_cli.runner import Proc
