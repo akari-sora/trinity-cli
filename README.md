@@ -41,7 +41,7 @@ macOS 與 Linux（需要 Python 3.11+；Grok 還要 Node 18+）：
 
 ```bash
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
-npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
+npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
 uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
 chatgpt-dot-cli --version
@@ -57,7 +57,7 @@ Windows（PowerShell，同樣的釘選）：
 ```powershell
 irm https://astral.sh/uv/install.ps1 | iex
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
-npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
+npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
 uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
@@ -398,7 +398,7 @@ macOS and Linux (Python 3.11+; Grok also needs Node 18+):
 
 ```bash
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
-npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
+npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
 uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
 chatgpt-dot-cli --version
@@ -414,7 +414,7 @@ Windows (PowerShell, same pins):
 ```powershell
 irm https://astral.sh/uv/install.ps1 | iex
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
-npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
+npm install -g "git+https://gitlab.com/aa22396584/grok-bot-cli.git#v0.11.2-iml1s.2"
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
 uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
