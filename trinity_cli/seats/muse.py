@@ -13,7 +13,10 @@ digest can say 可能漏看.
 
 `instructions` stays on the base class: Muse has no instruction API, so
 `brief push` prints a draft. `memory` is read-only and only used by `brief diff`.
-The api backend is a seam; when muse-web-cli reports it unsupported, so do we.
+muse-web-cli v0.1.2 still defaults to the browser backend. trinity does not pass
+`--backend`; the tool's `--backend`, `MUSE_WEB_BACKEND`, or its config chooses.
+When the api backend reports a capability unsupported (exit 4), that capability
+is unsupported here too and does not raise.
 """
 
 from __future__ import annotations

@@ -35,15 +35,15 @@
 
 ### 安裝
 
-版本先維持這些釘選。三個座位工具和 trinity 都裝好後，用 `--version` 對一下。
+v0.3.3 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下。
 
 macOS 與 Linux（需要 Python 3.11+；Grok 還要 Node 18+）：
 
 ```bash
-uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.1"
-npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.1
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
+uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
+npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.2"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.3"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -56,11 +56,11 @@ Windows（PowerShell，同樣的釘選）：
 
 ```powershell
 irm https://astral.sh/uv/install.ps1 | iex
-uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.1"
-npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.1
+uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
+npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.2"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.3"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -270,7 +270,7 @@ trinity-cli login muse --web
 
 ### 概念
 
-三個座位的能力不一樣。沒有的能力會明白寫「不支援」，結束碼仍是 0，不會連帶讓別的座位失敗。Muse 的 `api` backend 是接縫。Muse 沒有指令 API。Grok 群組只在 `ask grok <群組>` 和 `hand`／`wait` 的 `grok:<名字>` 可用；`status` 和 `digest` 只看 bot。
+三個座位的能力不一樣。沒有的能力會明白寫「不支援」，結束碼仍是 0，不會連帶讓別的座位失敗。`muse-web-cli` v0.1.2 預設仍是 browser。backend 由該工具的 `--backend`、`MUSE_WEB_BACKEND` 或它自己的設定檔決定，trinity 不傳 `--backend`。改成 api 且該能力不支援時，每個能力分開回報不支援，不會讓 trinity 當掉。Muse 沒有指令 API。Grok 群組只在 `ask grok <群組>` 和 `hand`／`wait` 的 `grok:<名字>` 可用；`status` 和 `digest` 只看 bot。
 
 讀取位置在 `state.json` 的 `cursors`。只有 `digest` 把輸出印完才前進。`--peek`、`--since`、`hand`、`wait` 都不動。對不上上次的結尾時標「可能漏看」。
 
@@ -369,15 +369,15 @@ Supported systems: Linux (CI), Windows (CI), and macOS (local use and live check
 
 ### Install
 
-Pins stay as they are for now. After installing trinity and each seat tool, check every `--version`.
+v0.3.3 pins these versions. After installing trinity and each seat tool, check every `--version`.
 
 macOS and Linux (Python 3.11+; Grok also needs Node 18+):
 
 ```bash
-uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.1"
-npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.1
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
+uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
+npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.2"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.3"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -390,11 +390,11 @@ Windows (PowerShell, same pins):
 
 ```powershell
 irm https://astral.sh/uv/install.ps1 | iex
-uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.1"
-npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.1
+uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
+npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.2"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.3"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -604,7 +604,7 @@ trinity-cli login muse --web
 
 ### Concepts
 
-The seats do not have the same capabilities. A missing one is reported as unsupported, still exit 0, and does not fail the others. Muse's `api` backend is a seam. Muse has no instruction API. Grok groups work with `ask grok <group>` and `grok:<name>` on `hand` / `wait`; `status` and `digest` cover bots only.
+The seats do not have the same capabilities. A missing one is reported as unsupported, still exit 0, and does not fail the others. `muse-web-cli` v0.1.2 still defaults to the browser backend. The backend is chosen by that tool's `--backend`, `MUSE_WEB_BACKEND`, or its own config file; trinity does not pass `--backend`. If api is selected and a capability is unsupported, that capability is reported on its own and trinity does not crash. Muse has no instruction API. Grok groups work with `ask grok <group>` and `grok:<name>` on `hand` / `wait`; `status` and `digest` cover bots only.
 
 Cursors live in `cursors` inside `state.json`. Only `digest` moves them, and only after the output was printed. `--peek`, `--since`, `hand`, and `wait` do not. When the previous tail is gone, the timeline says 可能漏看 ("possibly missed").
 

@@ -17,7 +17,7 @@ from trinity_cli.runner import LOGIN_TIMEOUT, Runner, find_tool
 from trinity_cli.seats.base import Problem, Seat
 from trinity_cli.util import has_nonce, iso, local_stamp, now_utc, one_line, parse_time, with_nonce
 
-# chatgpt-dot-cli v0.2.1 rejects --limit outside 1..32 with exit 2 and sends no request.
+# chatgpt-dot-cli v0.2.2 rejects --limit outside 1..32 with exit 2 and sends no request.
 MESSAGE_LIMIT = 30
 MESSAGE_LIMIT_MAX = 32
 FIRST_READ = 10
@@ -168,7 +168,7 @@ class DotSeat(Seat):
         return dots[0]
 
     def _messages(self, raw: object, dot: dict) -> list[Message]:
-        # v0.2.1 --json is always {"name","lines","messages"} (oldest first).
+        # v0.2.2 --json is always {"name","lines","messages"} (oldest first).
         # Extra keys, including "note" on an empty room, are ignored. A bare list
         # is still accepted so a partial payload does not get misread as a speaker.
         if isinstance(raw, dict) and isinstance(raw.get("messages"), list):

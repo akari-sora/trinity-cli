@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.3
 
+- 座位工具釘在 `chatgpt-dot-cli` v0.2.2、gbot fork v0.11.2-iml1s.2、`muse-web-cli` v0.1.2。
+- Muse 仍預設走 browser。backend 由 muse-web-cli 的 `--backend`、`MUSE_WEB_BACKEND` 或它自己的設定檔決定，trinity 不傳 `--backend`。使用者改成 api 且該能力不支援時，每個能力分開回報不支援，不會讓整支指令當掉。
 - `trinity-cli login muse` 執行公開的 `muse login`（瀏覽器核准）。`--api-key` 把標準輸入交給 `muse auth set --api-key-stdin`。`--web` 才是 `muse-web-cli login`。trinity 不讀、不印、不複製憑證，也不寫入 `~/.trinity-cli/muse-credential`。api 後端缺憑證時，status 改提示這條。
 - 用法說明改成中英完整對照：安裝、第一次設定、每個指令和旗標、`--json` 欄位、結束碼、檔案與安全界線。`--help` 每個指令和旗標都有預設值或範圍。
 - Windows 與 Linux：用 `shutil.which` 找工具（含 `gbot.cmd`），參數用清單、不用 shell；子程序輸出以 UTF-8 解碼；逾時在 Windows 用 `taskkill /T`。狀態、帳本、設定在 `TRINITY_HOME` 或家目錄的 `.trinity-cli`，寫入用 `os.replace`。

@@ -39,7 +39,7 @@ def _argv(runner):
 
 class MuseContractTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(__version__, "0.3.2")
+        self.assertEqual(__version__, "0.3.3")
 
     def test_each_exit_state_on_status(self):
         for state, want, hint in _STATES:
@@ -68,6 +68,36 @@ class MuseContractTests(unittest.TestCase):
         self.assertIn("自己放", result.hint)
         self.assertIn("不讀", result.hint)
         self.assertNotIn("muse-web-cli login", result.hint)
+
+    def test_api_backend_reports_each_unsupported_capability(self):
+        world = MuseWorld(unsupported=True)
+        world.backend = "api"
+        seat, _ = _seat(world)
+        results = {
+            "status": seat.status(),
+            "read": seat.read({}),
+            "send": seat.send(None, "hi", "abc123"),
+            "schedules": seat.schedules(),
+            "memory": seat.memory(),
+        }
+        for name, result in results.items():
+            self.assertEqual(result.state, "unsupported", name)
+            self.assertTrue(result.error, name)
+
+        mixed = MuseWorld()
+        mixed.backend = "api"
+        mixed.pending_count = None
+        for command in ("messages", "send", "pending", "upcoming", "memory", "chats"):
+            mixed.force[command] = "unsupported"
+        seat, _ = _seat(mixed)
+        status = seat.status()
+        self.assertEqual(status.state, "ok")
+        self.assertIn("api", status.value.summary)
+        self.assertIn("chats 不支援", status.value.summary)
+        self.assertEqual(seat.read({}).state, "unsupported")
+        self.assertEqual(seat.send(None, "hi", "abc123").state, "unsupported")
+        self.assertEqual(seat.schedules().state, "unsupported")
+        self.assertEqual(seat.memory().state, "unsupported")
 
     def test_ok_status_skips_pending_until_there_is_something_to_do(self):
         world = MuseWorld()
