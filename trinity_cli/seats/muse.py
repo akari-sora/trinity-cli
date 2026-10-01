@@ -13,10 +13,13 @@ digest can say 可能漏看.
 
 `instructions` stays on the base class: Muse has no instruction API, so
 `brief push` prints a draft. `memory` is read-only and only used by `brief diff`.
-muse-web-cli v0.1.2 still defaults to the browser backend. trinity does not pass
-`--backend`; the tool's `--backend`, `MUSE_WEB_BACKEND`, or its config chooses.
-When the api backend reports a capability unsupported (exit 4), that capability
-is unsupported here too and does not raise.
+muse-web-cli v0.1.2 accepts `--backend browser|api`. trinity passes it when a
+choice is resolved: CLI `--muse-backend`, then config `muse_backend`, then
+`MUSE_WEB_BACKEND`. With no choice, trinity omits `--backend`. `auto` tries api
+first and, on exit 4, retries that capability on browser. A send that timed out
+is never retried on the other backend. The payload's `backend` is the one that
+served the result. When the api backend reports a capability unsupported and
+there is no fallback, that capability is unsupported here too and does not raise.
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ from trinity_cli.model import (
     Message,
     ReadOutcome,
     Result,
+    SourceFailure,
     ScheduleItem,
     SeatStatus,
     SendReceipt,
@@ -47,9 +51,9 @@ FIX_MUSE = "安裝 Muse Code，或用 TRINITY_MUSE 指定路徑"
 FIX_LOGIN = "muse-web-cli login"
 FIX_START = "muse-web-cli start --headless"
 FIX_TOKEN = (
-    "執行 `trinity-cli login muse`（憑證留在 muse，不會寫入這個檔）。"
-    "金鑰用 `trinity-cli login muse --api-key`。"
-    "~/.trinity-cli/muse-credential 仍要自己放，權限 600。trinity 不讀、不複製"
+    "執行 `trinity-cli login muse`。"
+    "它會呼叫 `muse-web-cli credential`，把已登入的 Muse 寫進 ~/.trinity-cli/muse-credential（mode 600）。"
+    "不讀、不印 token。金鑰用 `trinity-cli login muse --api-key`。"
 )
 def credential_mode_fix() -> str:
     if os.name == "nt":
@@ -58,8 +62,8 @@ def credential_mode_fix() -> str:
         )
     return "chmod 600 ~/.trinity-cli/muse-credential"
 _TOKEN_OK = (
-    "Muse 登入已完成。憑證留在 muse 自己的設定裡，trinity 沒有讀取，"
-    "也沒有寫入 ~/.trinity-cli/muse-credential。"
+    "已從已登入的 Muse 寫入 ~/.trinity-cli/muse-credential。"
+    "沒有印出 token。"
 )
 _KEY_OK = "已把標準輸入交給 muse auth set。trinity 沒有保存金鑰。"
 _WEB_OK = "Muse 網頁已登入。接著可以執行 `muse-web-cli start --headless`。"
@@ -75,6 +79,9 @@ _HINTS = {
     "session_expired": FIX_LOGIN,
     "browser_down": FIX_START,
     "credential_permissions": "credential file mode",
+    "profile_busy": "先關掉佔用的 Muse 視窗，再執行 `muse-web-cli start --headless`",
+    "region_blocked": "這個工具不會繞過地區限制。",
+    "ui_changed": "更新 muse-web-cli 後重試",
 }
 _ERRORS = {
     "browser_down": "Muse 的瀏覽器沒有啟動",
@@ -139,6 +146,8 @@ class MuseSeat(Seat):
         sleep=None,
         now=None,
         token_binary: str | None = None,
+        backend: str | None = None,
+        include_activity: bool = True,
     ):
         self.runner = runner or Runner()
         if binary is None:
@@ -156,14 +165,57 @@ class MuseSeat(Seat):
         self.clock = clock or time.monotonic
         self.sleep = sleep or time.sleep
         self.now = now or now_utc
+        self.backend = backend if backend in {None, "browser", "api", "auto"} else None
+        self.include_activity = include_activity
+        self.served_backend = ""
+        self.fell_back = False
 
-    def _run(self, args: list[str], *, timeout: float):
+    def _invoke(self, args: list[str], *, timeout: float, backend: str | None):
         if not self.binary:
             raise Problem("找不到 muse-web-cli", FIX_INSTALL)
-        proc = self.runner.run([self.binary, "--json", "--autostart", *args], timeout=timeout)
+        argv = [self.binary, "--json", "--autostart"]
+        if backend in {"browser", "api"}:
+            argv += ["--backend", backend]
+        proc = self.runner.run([*argv, *args], timeout=timeout)
         if proc.code == 127:
             raise Problem("找不到 muse-web-cli", FIX_INSTALL)
         return proc, _object(proc.out)
+
+    def _unsupported(self, proc, payload: dict) -> bool:
+        return proc.code == 4 or str(payload.get("state") or "") == "unsupported"
+
+    def _send_timed_out(self, args: list[str], proc, payload: dict) -> bool:
+        if not args or args[0] != "send":
+            return False
+        return bool(proc.timed_out or str(payload.get("state") or "") == "timeout")
+
+    def _remember(self, payload: dict, requested: str | None) -> None:
+        served = payload.get("backend") if isinstance(payload.get("backend"), str) else ""
+        self.served_backend = served or (requested if requested in {"browser", "api"} else "")
+
+    def _run(self, args: list[str], *, timeout: float):
+        choice = self.backend
+        if choice != "auto":
+            self.fell_back = False
+            proc, payload = self._invoke(args, timeout=timeout, backend=choice)
+            self._remember(payload, choice)
+            return proc, payload
+        proc, payload = self._invoke(args, timeout=timeout, backend="api")
+        # A timed-out send may already have been delivered. Never try the other backend.
+        if self._unsupported(proc, payload) and not self._send_timed_out(args, proc, payload):
+            self.fell_back = True
+            proc, payload = self._invoke(args, timeout=timeout, backend="browser")
+        else:
+            self.fell_back = False
+        self._remember(payload, "api" if not self.fell_back else "browser")
+        return proc, payload
+
+    def _backend_note(self) -> str:
+        if not self.served_backend:
+            return ""
+        if self.fell_back:
+            return "browser（api 不支援，已改走 browser）"
+        return self.served_backend
 
     def _problem(self, proc, payload: dict) -> Problem:
         state = str(payload.get("state") or "")
@@ -193,10 +245,11 @@ class MuseSeat(Seat):
         return Result.ok(ok)
 
     def login(self, *, mode: str = "token") -> Result:
-        """Token: `muse login` or `muse auth set`. Web seat: `muse-web-cli login`.
+        """Default: `muse-web-cli credential` (logs in, then writes muse-credential).
 
-        trinity does not read ~/.config/muse/auth.json and does not copy a credential
-        into ~/.trinity-cli/muse-credential.
+        `--api-key` still passes stdin to `muse auth set`. `--web` is headed
+        `muse-web-cli login`. trinity does not read ~/.config/muse/auth.json,
+        ~/.codex/auth.json, or the Grok Bot session, and it does not print the token.
         """
         if mode == "api-key":
             return self._attach_muse(
@@ -208,7 +261,29 @@ class MuseSeat(Seat):
             return self._web_login()
         if mode != "token":
             return Result.failed("看不懂的登入方式", "`trinity-cli login muse --help`")
-        return self._attach_muse(["login"], ok=_TOKEN_OK, bad="Muse 登入沒有完成")
+        return self._capture_credential()
+
+    def _capture_credential(self) -> Result:
+        if not self.binary:
+            return Result.failed("找不到 muse-web-cli", FIX_INSTALL)
+        proc = self.runner.run([self.binary, "--json", "credential"], timeout=LOGIN_TIMEOUT)
+        if proc.code == 127:
+            return Result.failed("找不到 muse-web-cli", FIX_INSTALL)
+        payload = _object(proc.out)
+        if proc.timed_out and not payload.get("state"):
+            return Result.failed("Muse 登入逾時", "再執行一次 `trinity-cli login muse`")
+        state = str(payload.get("state") or "")
+        fields = payload.get("fields") if isinstance(payload.get("fields"), dict) else {}
+        names = [name for name in ("base_url", "vm_id", "auth.type", "auth.token", "timeout_s", "notary_token") if fields.get(name)]
+        if payload.get("wrote") is True and state in {"", "ok"} and proc.code == 0 and not proc.timed_out:
+            listed = "、".join(names) if names else "憑證欄位"
+            return Result.ok(f"{_TOKEN_OK} 有值的欄位：{listed}。")
+        if payload.get("logged_in") is False or state == "session_expired":
+            return Result.failed("尚未登入。", "請在開啟的 Chrome 視窗登入 Muse。這個工具不會輸入帳號密碼。")
+        if not payload and proc.code != 0:
+            return Result.failed("沒有寫入 ~/.trinity-cli/muse-credential。", "再執行一次 `trinity-cli login muse`")
+        problem = self._problem(proc, payload)
+        return Result.failed(problem.error, problem.hint)
 
     def _web_login(self) -> Result:
         if not self.binary:
@@ -307,10 +382,14 @@ class MuseSeat(Seat):
                 parts.append("背景")
             elif payload.get("headless") is False:
                 parts.append("有視窗")
-            backend = payload.get("backend")
-            if isinstance(backend, str) and backend and backend != "browser":
-                parts.append(backend)
+            backend_note = self._backend_note()
+            served = self.served_backend
+            fell_back = self.fell_back
+            if backend_note:
+                parts.append(backend_note)
             kind, note = self._chat()
+            self.served_backend = served
+            self.fell_back = fell_back
             hint = ""
             if kind == "main":
                 parts.append("主聊天室")
@@ -327,7 +406,8 @@ class MuseSeat(Seat):
                     problems,
                     hint,
                     details={
-                        "backend": payload.get("backend"),
+                        "backend": self.served_backend or payload.get("backend"),
+                        "fallback": self.fell_back,
                         "headless": payload.get("headless"),
                         "pending": count if isinstance(count, int) else 0,
                         "latest_assistant_is_card": bool(payload.get("latest_assistant_is_card")),
@@ -363,12 +443,48 @@ class MuseSeat(Seat):
                         at=None,
                         from_agent=role == "assistant",
                         key=key,
+                        presentation=bool(item.get("presentation")),
                     )
                 )
             cursor = cursors.get(CURSOR_KEY) if isinstance(cursors, dict) else None
             if not (isinstance(cursor, dict) and cursor.get("id")) and isinstance(cursors, dict) and isinstance(cursors.get("*"), dict):
                 cursor = cursors["*"]
-            return Result.ok(ReadOutcome([_batch(messages, keys, cursor if isinstance(cursor, dict) else None, since)]))
+            label = f"Muse · {self._backend_note()}" if self._backend_note() else "Muse"
+            batches = [_batch(messages, keys, cursor if isinstance(cursor, dict) else None, since, label)]
+            failures: list = []
+            if self.include_activity:
+                try:
+                    activity = self._payload(["activity"])
+                except _Unsupported:
+                    activity = None
+                except Problem as problem:
+                    failures.append(SourceFailure("Muse 動態", problem.error, problem.hint))
+                    activity = None
+                if activity:
+                    rows = _schedule_items(activity, "")
+                    act_messages: list[Message] = []
+                    act_keys: list[str] = []
+                    counts: dict[str, int] = {}
+                    for item in rows:
+                        text = " · ".join(part for part in (item.title, item.when) if part)
+                        if not text:
+                            continue
+                        key = _content_key("activity", text, counts)
+                        act_keys.append(key)
+                        act_messages.append(Message(self.label, self.label, text, None, True, key))
+                    if act_messages:
+                        saved_cursor = cursors.get("muse.activity") if isinstance(cursors, dict) else None
+                        batches.append(
+                            _batch(
+                                act_messages,
+                                act_keys,
+                                saved_cursor if isinstance(saved_cursor, dict) else None,
+                                None,
+                                f"{label} 動態",
+                                "muse.activity",
+                            )
+                        )
+            return Result.ok(ReadOutcome(batches, failures))
 
         return self._guard(run)
 
@@ -423,7 +539,10 @@ class MuseSeat(Seat):
                 index = next((i for i, item in enumerate(messages) if not item.from_agent and has_nonce(item.text, receipt.nonce)), None)
                 if index is not None:
                     delivered = True
-                    reply = next((item for item in messages[index + 1 :] if item.from_agent), None)
+                    reply = next(
+                        (item for item in messages[index + 1 :] if item.from_agent and not item.presentation),
+                        None,
+                    )
                     if reply:
                         return Result.ok(WaitOutcome(True, reply, False, polls))
                 elif delivered is None:
@@ -434,20 +553,21 @@ class MuseSeat(Seat):
 
     def schedules(self) -> Result:
         def run() -> Result:
-            payload = self._payload(["upcoming"])
-            groups = payload.get("groups") if isinstance(payload.get("groups"), list) else []
             items: list[ScheduleItem] = []
-            for group in groups:
-                if not isinstance(group, dict):
+            misses: list[str] = []
+            saw = False
+            for command, kind in (("upcoming", ""), ("activity", "動態")):
+                if command == "activity" and not self.include_activity:
                     continue
-                title = str(group.get("title") or "")
-                rows = group.get("items") if isinstance(group.get("items"), list) else []
-                for row in rows:
-                    if not isinstance(row, dict):
-                        continue
-                    name = str(row.get("name") or row.get("title") or title or "未命名")
-                    when = str(row.get("time") or "")
-                    items.append(ScheduleItem(name, when, title))
+                try:
+                    payload = self._payload([command])
+                except _Unsupported as exc:
+                    misses.append(exc.reason)
+                    continue
+                saw = True
+                items.extend(_schedule_items(payload, kind))
+            if not saw and misses:
+                raise _Unsupported(misses[0])
             return Result.ok(items)
 
         return self._guard(run)
@@ -461,25 +581,49 @@ class MuseSeat(Seat):
         return self._guard(run)
 
 
-def _batch(messages: list[Message], keys: list[str], cursor: dict | None, since: datetime | None) -> Batch:
+def _schedule_items(payload: dict, kind: str) -> list[ScheduleItem]:
+    groups = payload.get("groups") if isinstance(payload.get("groups"), list) else []
+    items: list[ScheduleItem] = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        title = str(group.get("title") or "")
+        rows = group.get("items") if isinstance(group.get("items"), list) else []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or row.get("title") or title or "未命名")
+            when = str(row.get("time") or "")
+            items.append(ScheduleItem(name, when, kind or title))
+    return items
+
+
+def _batch(
+    messages: list[Message],
+    keys: list[str],
+    cursor: dict | None,
+    since: datetime | None,
+    label: str = "Muse",
+    cursor_key: str = CURSOR_KEY,
+) -> Batch:
     tail = keys[-1] if keys else None
     saved = {"id": tail, "keys": list(keys)} if tail else None
     if since is not None:
-        return Batch(CURSOR_KEY, "Muse", messages, saved, False, "沒有時間戳，--since 無法過濾，顯示這次讀到的訊息")
+        return Batch(cursor_key, label, messages, saved, False, "沒有時間戳，--since 無法過濾，顯示這次讀到的訊息")
     if isinstance(cursor, dict) and cursor.get("id") == WINDOW_CURSOR_ID:
-        return Batch(CURSOR_KEY, "Muse", messages, saved, False, "")
+        return Batch(cursor_key, label, messages, saved, False, "")
     previous = cursor.get("id") if isinstance(cursor, dict) else None
     if not previous:
         shown = messages[-FIRST_READ:]
         note = f"第一次讀取：只顯示最近 {len(shown)} 則" if len(messages) > len(shown) else ""
-        return Batch(CURSOR_KEY, "Muse", shown, saved, False, note)
+        return Batch(cursor_key, label, shown, saved, False, note)
     if previous in keys:
-        return Batch(CURSOR_KEY, "Muse", messages[keys.index(previous) + 1 :], saved, False, "")
+        return Batch(cursor_key, label, messages[keys.index(previous) + 1 :], saved, False, "")
     seen = set(cursor.get("keys") or []) if isinstance(cursor, dict) else set()
     fresh = [item for item, key in zip(messages, keys) if key not in seen]
     return Batch(
-        CURSOR_KEY,
-        "Muse",
+        cursor_key,
+        label,
         fresh if fresh else messages,
         saved,
         True,

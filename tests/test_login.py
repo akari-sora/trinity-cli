@@ -29,20 +29,36 @@ def _run(seats, *argv):
 
 
 class MuseLoginTests(unittest.TestCase):
-    def test_token_login_calls_muse_login_and_drops_child_output(self):
-        runner = _runner(_proc(0, FAKE_JWT, SECRET))
-        seat = MuseSeat(runner, binary="muse-web-cli", token_binary="/fake/bin/muse")
+    def test_token_login_calls_credential_and_drops_child_output(self):
+        payload = {
+            "state": "ok",
+            "wrote": True,
+            "logged_in": True,
+            "fields": {
+                "base_url": True,
+                "vm_id": True,
+                "auth.type": True,
+                "auth.token": True,
+                "timeout_s": True,
+                "notary_token": False,
+            },
+            "token": FAKE_JWT,
+            "error": None,
+            "hint": None,
+        }
+        runner = _runner(_proc(0, json.dumps(payload), SECRET))
+        seat = MuseSeat(runner, binary="/fake/bin/muse-web-cli", token_binary="/fake/bin/muse")
         code, text, err = _run([seat], "login", "muse")
         self.assertEqual(code, 0, err)
         call = runner.calls[0]
-        self.assertEqual(call["argv"], ["/fake/bin/muse", "login"])
-        self.assertTrue(call["attach"])
+        self.assertEqual(call["argv"], ["/fake/bin/muse-web-cli", "--json", "credential"])
+        self.assertFalse(call.get("attach"))
         self.assertEqual(call["timeout"], LOGIN_TIMEOUT)
-        self.assertIsNone(call["stdin"])
         self.assertNotIn("auth.json", " ".join(call["argv"]))
         self.assertNotIn("--autostart", call["argv"])
-        self.assertIn("沒有讀取", text)
         self.assertIn("muse-credential", text)
+        self.assertIn("沒有印出 token", text)
+        self.assertIn("auth.token", text)
         self.assertNotIn(FAKE_JWT, text)
         self.assertNotIn("sekret-value", text)
         self.assertNotIn(FAKE_JWT, err)
@@ -93,20 +109,20 @@ class MuseLoginTests(unittest.TestCase):
         self.assertIn("Chrome 視窗", text)
         self.assertNotIn("59999", text)
 
-    def test_missing_muse_does_not_spawn(self):
+    def test_missing_muse_web_cli_does_not_spawn_for_credential(self):
         runner = _runner(_proc())
-        seat = MuseSeat(runner, binary="muse-web-cli", token_binary="")
+        seat = MuseSeat(runner, binary="", token_binary="/fake/bin/muse")
         code, text, _ = _run([seat], "login", "muse")
         self.assertEqual(code, 1)
-        self.assertIn("找不到 muse", text)
+        self.assertIn("找不到 muse-web-cli", text)
         self.assertEqual(runner.calls, [])
 
-    def test_failed_muse_login_keeps_the_child_output_out(self):
+    def test_failed_credential_keeps_the_child_output_out(self):
         runner = _runner(_proc(1, FAKE_JWT, SECRET))
-        seat = MuseSeat(runner, binary="muse-web-cli", token_binary="/fake/bin/muse")
+        seat = MuseSeat(runner, binary="/fake/bin/muse-web-cli", token_binary="/fake/bin/muse")
         code, text, _ = _run([seat], "login", "muse")
         self.assertEqual(code, 1)
-        self.assertIn("沒有完成", text)
+        self.assertIn("沒有寫入", text)
         self.assertNotIn(FAKE_JWT, text)
         self.assertNotIn("sekret-value", text)
 

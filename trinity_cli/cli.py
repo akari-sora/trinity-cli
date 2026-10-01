@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from trinity_cli import __version__
 from trinity_cli.advise import run_who
-from trinity_cli.config import add_grok_seat, remove_grok_seat
+from trinity_cli.config import add_grok_seat, remove_grok_seat, resolve_muse_backend
 from trinity_cli.grok_admin import bots_json, discover, render_bots
 from trinity_cli.model import FAILED, ReadOutcome
 from trinity_cli.app import (
@@ -32,6 +32,7 @@ from trinity_cli.redact import scrub
 from trinity_cli.runner import Runner
 from trinity_cli.seats import build_seats
 from trinity_cli.seats.grok import GrokSeat
+from trinity_cli.seats.muse import MuseSeat
 from trinity_cli.targets import default_grok, find_seat, grok_seats
 from trinity_cli.state import Ledger, State, home
 from trinity_cli.schedule_report import run_schedules
@@ -75,6 +76,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  trinity-cli brief diff\n"
             "  trinity-cli log --seat dot\n"
             "  trinity-cli login muse\n"
+            "  trinity-cli --muse-backend api status\n"
+            "  trinity-cli status --muse-backend auto\n"
             "With no command, status runs.\n"
             "--json may appear before or after the command.\n"
             "hand and brief push ask before sending; add --yes to skip the prompt.\n"
@@ -99,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     digest.add_argument("--since", help="look back: 30m, 2h, 1d, 1w, or ISO time; does not move cursors (no default)")
     digest.add_argument("--peek", action="store_true", help="show new messages without moving cursors (default: move them after printing)")
-    digest.add_argument("--no-activity", action="store_true", help="skip Your dot activity (default: include it; saves about 20s)")
+    digest.add_argument("--no-activity", action="store_true", help="skip Your dot activity and Muse activity (default: include both)")
     digest.add_argument("--limit", type=int, help="messages for Your dot (1..32, default 30) and Grok (1..200, default 40); Muse stays at 40, max 100")
     digest.add_argument("--bot", help="read this Grok bot instead of the configured Grok seats (default: configured seats)")
     digest.add_argument("--account", help="gbot login label for --bot; required when that name exists on more than one login")
@@ -189,8 +192,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="sign in a seat through its own CLI; credentials are never printed",
     )
     login.add_argument("seat", choices=("dot", "grok", "muse"), help="dot (codex login), grok (app instructions only), or muse")
-    login.add_argument("--api-key", action="store_true", help="Muse only: pass an API key on stdin to `muse auth set` (default: browser muse login)")
-    login.add_argument("--web", action="store_true", help="Muse only: headed `muse-web-cli login` (default: muse login; cannot combine with --api-key)")
+    login.add_argument("--api-key", action="store_true", help="Muse only: pass an API key on stdin to `muse auth set` (default: muse-web-cli credential)")
+    login.add_argument("--web", action="store_true", help="Muse only: headed `muse-web-cli login` (default: muse-web-cli credential; cannot combine with --api-key)")
 
     log = sub.add_parser("log", help="show the send ledger", description="show the send ledger")
     log.add_argument("--seat", help="only this seat: dot, muse, grok (the default Grok seat), or a name such as grok-a (default: every seat)")
@@ -224,21 +227,53 @@ def build_parser() -> argparse.ArgumentParser:
     log.add_argument("--since", help="30m, 2h, 1d, 1w, or an ISO time (default: all records)")
     log.add_argument("--status", help="match event, reply, or readback, such as sent, replied, timed_out (default: any)")
     log.add_argument("--limit", type=int, default=50, help="how many matching lines to show (default 50, minimum 1)")
+    _install_muse_backend_flag(parser)
+    for command in sub.choices.values():
+        _install_muse_backend_flag(command)
+        for action in command._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                for nested in action.choices.values():
+                    _install_muse_backend_flag(nested)
     return parser
 
 
-def _split_globals(argv: list[str]) -> tuple[list[str], bool]:
+def _install_muse_backend_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--muse-backend",
+        choices=("browser", "api", "auto"),
+        help="Muse backend for this command: browser, api, or auto (default: config muse_backend, else MUSE_WEB_BACKEND, else muse-web-cli's own default)",
+    )
+
+
+def _split_globals(argv: list[str]) -> tuple[list[str], bool, str | None]:
     cleaned: list[str] = []
     as_json = False
-    for index, item in enumerate(argv):
+    muse_backend = None
+    index = 0
+    while index < len(argv):
+        item = argv[index]
         if item == "--":
             cleaned.extend(argv[index:])
             break
         if item == "--json":
             as_json = True
+            index += 1
+            continue
+        if item == "--muse-backend" or item.startswith("--muse-backend="):
+            if item.startswith("--muse-backend="):
+                muse_backend = item.split("=", 1)[1]
+                index += 1
+                continue
+            if index + 1 >= len(argv):
+                muse_backend = ""
+                index += 1
+                continue
+            muse_backend = argv[index + 1]
+            index += 2
             continue
         cleaned.append(item)
-    return cleaned, as_json
+        index += 1
+    return cleaned, as_json, muse_backend
 
 
 def emit(out, text: str) -> None:
@@ -332,19 +367,31 @@ def main(
     configure_stdio()
     parser = build_parser()
     raw = list(sys.argv[1:] if argv is None else argv)
-    cleaned, as_json = _split_globals(raw)
+    cleaned, as_json, muse_flag = _split_globals(raw)
     args = parser.parse_args(cleaned)
+    if muse_flag is not None and resolve_muse_backend(muse_flag, data={}, env={}) is None:
+        print("`--muse-backend` 只能是 browser、api 或 auto。", file=err or sys.stderr)
+        return 2
     command = args.command or "status"
     out = out or sys.stdout
     err = err or sys.stderr
     no_activity = bool(getattr(args, "no_activity", False))
     allow_discover = seats is None
     if seats is None:
-        seats = build_seats(grok_bot=getattr(args, "grok_bot", None), include_activity=not no_activity)
+        seats = build_seats(
+            grok_bot=getattr(args, "grok_bot", None),
+            include_activity=not no_activity,
+            muse_backend=resolve_muse_backend(muse_flag),
+        )
     elif no_activity:
         for seat in seats:
             if hasattr(seat, "include_activity"):
                 seat.include_activity = False
+    if muse_flag and seats is not None:
+        chosen = resolve_muse_backend(muse_flag, data={}, env={})
+        for seat in seats:
+            if isinstance(seat, MuseSeat) and chosen:
+                seat.backend = chosen
     book = ledger or Ledger()
     try:
         if command == "status":

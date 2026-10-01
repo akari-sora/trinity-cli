@@ -9,6 +9,7 @@ from pathlib import Path
 from tests.fakes import FAKE_JWT, Clock, FakeRunner, MuseWorld
 from trinity_cli import __version__
 from trinity_cli.cli import main
+from trinity_cli.config import resolve_muse_backend
 from trinity_cli.seats.muse import MuseSeat, credential_mode_fix
 from trinity_cli.state import Ledger, State
 from trinity_cli.util import has_nonce
@@ -39,7 +40,7 @@ def _argv(runner):
 
 class MuseContractTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(__version__, "0.4.0")
+        self.assertEqual(__version__, "0.4.1")
 
     def test_each_exit_state_on_status(self):
         for state, want, hint in _STATES:
@@ -65,8 +66,9 @@ class MuseContractTests(unittest.TestCase):
         result = seat.status()
         self.assertEqual(result.state, "failed")
         self.assertIn("trinity-cli login muse", result.hint)
-        self.assertIn("自己放", result.hint)
+        self.assertIn("muse-web-cli credential", result.hint)
         self.assertIn("不讀", result.hint)
+        self.assertIn("不印", result.hint)
         self.assertNotIn("muse-web-cli login", result.hint)
 
     def test_api_backend_reports_each_unsupported_capability(self):
@@ -87,7 +89,7 @@ class MuseContractTests(unittest.TestCase):
         mixed = MuseWorld()
         mixed.backend = "api"
         mixed.pending_count = None
-        for command in ("messages", "send", "pending", "upcoming", "memory", "chats"):
+        for command in ("messages", "send", "pending", "upcoming", "activity", "memory", "chats"):
             mixed.force[command] = "unsupported"
         seat, _ = _seat(mixed)
         status = seat.status()
@@ -147,14 +149,15 @@ class MuseContractTests(unittest.TestCase):
         self.assertEqual(result.state, "ok")
         self.assertEqual(result.value[0].title, "晨間摘要")
         self.assertEqual(result.value[0].when, "08:00")
-        self.assertEqual([call[0] for call in world.calls], ["upcoming"])
+        self.assertEqual([call[0] for call in world.calls], ["upcoming", "activity"])
         self.assertFalse(seat.supports("instructions"))
         self.assertEqual(seat.instructions(update="do not write").state, "unsupported")
-        self.assertEqual(len(runner.calls), 1)
+        self.assertEqual(len(runner.calls), 2)
 
     def test_upcoming_unsupported_does_not_fail_the_capability_as_an_exception(self):
         world = MuseWorld()
         world.force["upcoming"] = "unsupported"
+        world.force["activity"] = "unsupported"
         seat, _ = _seat(world)
         result = seat.schedules()
         self.assertEqual(result.state, "unsupported")
@@ -434,6 +437,96 @@ class MuseContractTests(unittest.TestCase):
         self.assertIn("目前在副聊天室", result.value.problems)
         self.assertNotIn("SECRET_CHAT_TITLE", result.value.summary)
         self.assertNotIn("SECRET_SIDE_TITLE", result.value.hint)
+
+
+class MuseBackendTests(unittest.TestCase):
+    def test_precedence_is_flag_then_config_then_env(self):
+        self.assertEqual(resolve_muse_backend("api", data={"muse_backend": "browser"}, env={"MUSE_WEB_BACKEND": "auto"}), "api")
+        self.assertEqual(resolve_muse_backend(None, data={"muse_backend": "auto"}, env={"MUSE_WEB_BACKEND": "browser"}), "auto")
+        self.assertEqual(resolve_muse_backend(None, data={}, env={"MUSE_WEB_BACKEND": "api"}), "api")
+        self.assertIsNone(resolve_muse_backend(None, data={}, env={}))
+        self.assertEqual(resolve_muse_backend("nope", data={"muse_backend": "api"}, env={}), "api")
+        code = main(["status", "--muse-backend", "nope"], seats=[_seat(MuseWorld())[0]], out=io.StringIO(), err=io.StringIO())
+        self.assertEqual(code, 2)
+
+    def test_flag_passes_backend_and_status_names_it(self):
+        world = MuseWorld()
+        seat, _ = _seat(world)
+        out = io.StringIO()
+        code = main(["status", "--muse-backend", "api"], seats=[seat], out=out, err=io.StringIO())
+        self.assertEqual(code, 0)
+        self.assertIn("api", out.getvalue())
+        self.assertTrue(world.used_backends)
+        self.assertTrue(all(item == "api" for item in world.used_backends))
+        self.assertEqual(seat.served_backend, "api")
+
+    def test_auto_falls_back_per_capability_and_names_the_browser(self):
+        world = MuseWorld()
+        world.api_unsupported = {"status", "chats", "pending"}
+        seat, _ = _seat(world)
+        seat.backend = "auto"
+        result = seat.status()
+        self.assertEqual(result.state, "ok")
+        self.assertTrue(result.value.details["fallback"])
+        self.assertEqual(result.value.details["backend"], "browser")
+        self.assertIn("已改走 browser", result.value.summary)
+        self.assertEqual(world.used_backends[:2], ["api", "browser"])
+
+    def test_auto_does_not_resend_after_a_timeout(self):
+        world = MuseWorld()
+        world.timeout_send = True
+        seat, _ = _seat(world)
+        seat.backend = "auto"
+        result = seat.send(None, "hi", "abc123")
+        self.assertEqual(result.state, "ok")
+        self.assertEqual(world.used_backends, ["api", "api"])
+        self.assertEqual([call[0] for call in world.calls], ["chats", "send"])
+        self.assertEqual(sum(1 for call in world.calls if call[0] == "send"), 1)
+
+    def test_auto_send_unsupported_may_fall_back_because_nothing_was_sent(self):
+        world = MuseWorld()
+        world.api_unsupported = {"send"}
+        seat, _ = _seat(world)
+        seat.backend = "auto"
+        result = seat.send(None, "hi", "abc123")
+        self.assertEqual(result.state, "ok")
+        self.assertEqual([item for item, call in zip(world.used_backends, world.calls) if call[0] == "send"], ["api", "browser"])
+
+    def test_activity_is_listed_beside_upcoming_and_a_card_is_not_a_reply(self):
+        world = MuseWorld()
+        world.activity_groups = [{"title": "今天", "items": [{"title": "晨間摘要", "detail": "", "time": "08:00"}]}]
+        seat, _ = _seat(world)
+        result = seat.schedules()
+        self.assertEqual(result.state, "ok")
+        self.assertEqual(result.value[-1].title, "晨間摘要")
+        self.assertEqual(result.value[-1].status, "動態")
+        world.messages = [
+            {"role": "user", "text": "hi\n\n[trinity abc123]", "presentation": False},
+            {"role": "assistant", "text": "卡片", "presentation": True},
+        ]
+        clock = Clock()
+        seat, _ = _seat(world, clock)
+        seat.backend = None
+        from trinity_cli.model import SendReceipt
+        from datetime import datetime, timezone
+
+        receipt = SendReceipt("Muse", "Muse", "abc123", datetime.now(timezone.utc), "accepted")
+        waited = seat.wait(receipt, timeout=0, poll=1)
+        self.assertTrue(waited.value.timed_out)
+        self.assertIsNone(waited.value.reply)
+
+    def test_region_and_profile_have_fix_hints(self):
+        for state, hint in (
+            ("region_blocked", "不會繞過地區限制"),
+            ("profile_busy", "muse-web-cli start --headless"),
+            ("ui_changed", "更新 muse-web-cli"),
+        ):
+            world = MuseWorld()
+            world.force["status"] = state
+            seat, _ = _seat(world)
+            result = seat.status()
+            self.assertEqual(result.state, "failed")
+            self.assertIn(hint, result.hint)
 
 
 if __name__ == "__main__":
