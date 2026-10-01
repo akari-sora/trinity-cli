@@ -19,6 +19,7 @@ stages:
 
 test:
   stage: test
+  tags: [grok-box, ondemand, trinity-cli]
   image: python:3.12-slim
   variables:
     PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -30,8 +31,39 @@ test:
     - pip install -e .
     - python -m unittest discover -s tests
 
+# Hosted Windows runners do not use a Docker image. Inherit only retry settings
+# so this job is not also tagged grok-box (those runners would never match).
+test:windows:
+  stage: test
+  inherit:
+    default: [interruptible, retry]
+  tags: [saas-windows-medium-amd64]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
+  variables:
+    UV_INSTALL_DIR: '$CI_PROJECT_DIR\uv-install'
+    UV_CACHE_DIR: '$CI_PROJECT_DIR\.cache\uv'
+  cache:
+    key: uv-win
+    paths:
+      - .cache/uv
+      - uv-install
+  script:
+    - |
+      $ErrorActionPreference = "Stop"
+      $env:Path = "$env:UV_INSTALL_DIR;$env:USERPROFILE\.local\bin;" + $env:Path
+      if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        irm https://astral.sh/uv/install.ps1 | iex
+        $env:Path = "$env:UV_INSTALL_DIR;$env:USERPROFILE\.local\bin;" + $env:Path
+      }
+      uv venv .venv
+      .\.venv\Scripts\python.exe -m pip install -e .
+      .\.venv\Scripts\python.exe -m unittest discover -s tests
+
 release:
   stage: release
+  tags: [grok-box, ondemand, trinity-cli]
   image: python:3.12-slim
   interruptible: false
   rules:
@@ -78,10 +110,60 @@ release:
           if line.startswith("## "):
               break
           body.append(line)
-      print("\n".join(body).strip() or fallback)
+      text = "\n".join(body).strip() or fallback
+      text += """
+
+## Platforms
+- Linux: CI on the grok-box runner.
+- Windows: CI on GitLab hosted runners (saas-windows-medium-amd64).
+- macOS: local development and live checks.
+
+## Install
+- macOS and Linux: uv or pipx for trinity-cli, chatgpt-dot-cli, and muse-web-cli; npm for the gbot fork. Pins and commands are in the README.
+- Windows (PowerShell): irm https://astral.sh/uv/install.ps1 | iex, then the same uv pins. gbot: npm install -g github:ImL1s/grok-bot-cli#<pin>.
+
+## Related projects
+- trinity-cli (this repo) — one CLI over three always-on agents: https://gitlab.com/aa22396584/trinity-cli
+- chatgpt-dot-cli — ChatGPT Your dot: https://gitlab.com/aa22396584/chatgpt-dot-cli
+- grok-bot-cli (fork, gbot) — Grok Bot: https://gitlab.com/aa22396584/grok-bot-cli (mirror https://github.com/ImL1s/grok-bot-cli)
+- muse-web-cli — Meta Muse via the web: https://gitlab.com/aa22396584/muse-web-cli
+"""
+      print(text)
       PY
       )"
-      if ! release-cli create --name "$CI_COMMIT_TAG" --tag-name "$CI_COMMIT_TAG" --description "$notes"; then
+      pip install -q build
+      python3 -m build
+      python3 - <<'PY'
+      import os, pathlib, urllib.request
+      tag = os.environ["CI_COMMIT_TAG"]
+      base = (
+          os.environ["CI_API_V4_URL"]
+          + "/projects/"
+          + os.environ["CI_PROJECT_ID"]
+          + "/packages/generic/trinity-cli/"
+          + tag
+      )
+      token = os.environ["CI_JOB_TOKEN"]
+      lines = []
+      for path in sorted(pathlib.Path("dist").iterdir()):
+          if not path.is_file():
+              continue
+          url = base + "/" + path.name
+          request = urllib.request.Request(
+              url, data=path.read_bytes(), method="PUT", headers={"JOB-TOKEN": token}
+          )
+          with urllib.request.urlopen(request) as response:
+              print(response.status, path.name)
+          lines.append(
+              '{"name":"%s","url":"%s","link_type":"package"}' % (path.name, url)
+          )
+      pathlib.Path("dist/asset-links.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+      PY
+      link_args=()
+      while IFS= read -r link; do
+        [ -n "$link" ] && link_args+=(--assets-link "$link")
+      done < dist/asset-links.txt
+      if ! release-cli create --name "$CI_COMMIT_TAG" --tag-name "$CI_COMMIT_TAG" --description "$notes" "${link_args[@]}"; then
         status="$(python3 - <<'PY'
       import os, urllib.error, urllib.parse, urllib.request
       tag = urllib.parse.quote(os.environ["CI_COMMIT_TAG"], safe="")

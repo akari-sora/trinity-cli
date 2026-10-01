@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 from datetime import datetime
 
@@ -47,7 +48,12 @@ FIX_TOKEN = (
     "金鑰用 `trinity-cli login muse --api-key`。"
     "~/.trinity-cli/muse-credential 仍要自己放，權限 600。trinity 不讀、不複製"
 )
-FIX_CHMOD = "chmod 600 ~/.trinity-cli/muse-credential"
+def credential_mode_fix() -> str:
+    if os.name == "nt":
+        return (
+            r'icacls "%USERPROFILE%\.trinity-cli\muse-credential" /inheritance:r /grant:r "%USERNAME%:R"'
+        )
+    return "chmod 600 ~/.trinity-cli/muse-credential"
 _TOKEN_OK = (
     "Muse 登入已完成。憑證留在 muse 自己的設定裡，trinity 沒有讀取，"
     "也沒有寫入 ~/.trinity-cli/muse-credential。"
@@ -65,7 +71,7 @@ _PAGE = {"ui_changed", "timeout"}
 _HINTS = {
     "session_expired": FIX_LOGIN,
     "browser_down": FIX_START,
-    "credential_permissions": FIX_CHMOD,
+    "credential_permissions": "credential file mode",
 }
 _ERRORS = {
     "browser_down": "Muse 的瀏覽器沒有啟動",
@@ -101,6 +107,8 @@ def _hint(state: str, payload: dict) -> str:
     error = payload.get("error") if isinstance(payload.get("error"), str) else ""
     if state == "session_expired" and (payload.get("backend") == "api" or "muse-credential" in error):
         return FIX_TOKEN
+    if state == "credential_permissions":
+        return credential_mode_fix()
     hint = _HINTS.get(state) or ""
     if hint:
         return hint
@@ -131,11 +139,15 @@ class MuseSeat(Seat):
     ):
         self.runner = runner or Runner()
         if binary is None:
-            self.binary = find_tool("muse-web-cli", "TRINITY_MUSE_CLI", ("~/.local/bin/muse-web-cli",))
+            self.binary = find_tool(
+                "muse-web-cli",
+                "TRINITY_MUSE_CLI",
+                ("~/.local/bin/muse-web-cli", "~/.local/bin/muse-web-cli.exe"),
+            )
         else:
             self.binary = binary or None
         if token_binary is None:
-            self.token_binary = find_tool("muse", "TRINITY_MUSE", ("~/.local/bin/muse",))
+            self.token_binary = find_tool("muse", "TRINITY_MUSE", ("~/.local/bin/muse", "~/.local/bin/muse.exe"))
         else:
             self.token_binary = token_binary or None
         self.clock = clock or time.monotonic

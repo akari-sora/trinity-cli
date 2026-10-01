@@ -87,7 +87,9 @@ class DotSeat(Seat):
     ):
         self.runner = runner or Runner()
         self.binary = binary if binary is not None else find_tool(
-            "chatgpt-dot-cli", "TRINITY_DOT_CLI", ("~/.local/bin/chatgpt-dot-cli",)
+            "chatgpt-dot-cli",
+            "TRINITY_DOT_CLI",
+            ("~/.local/bin/chatgpt-dot-cli", "~/.local/bin/chatgpt-dot-cli.exe"),
         )
         if codex is None:
             self.codex = find_tool("codex", "TRINITY_CODEX", ())

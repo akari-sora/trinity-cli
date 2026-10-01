@@ -33,6 +33,20 @@ from trinity_cli.shown import Shown
 from trinity_cli.util import new_nonce, one_line, parse_since
 
 
+def configure_stdio() -> None:
+    """Windows consoles default to a legacy code page. Keep Chinese output intact."""
+    if sys.platform != "win32":
+        return
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            continue
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="trinity-cli",
@@ -41,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
             "examples:\n"
             "  trinity-cli status\n"
             "  trinity-cli digest\n"
+            "  trinity-cli digest --peek\n"
             "  trinity-cli digest --since 2h\n"
             "  trinity-cli ask all \"今天進度？\"\n"
             "  trinity-cli ask grok 蝴蝶 \"read back the last handoff\"\n"
@@ -48,74 +63,124 @@ def build_parser() -> argparse.ArgumentParser:
             "  trinity-cli wait grok:蝴蝶 --notify\n"
             "  trinity-cli schedules\n"
             "  trinity-cli who \"翻譯這段\"\n"
+            "  trinity-cli brief init\n"
             "  trinity-cli brief diff\n"
             "  trinity-cli log --seat dot\n"
             "  trinity-cli login muse\n"
+            "With no command, status runs.\n"
             "--json may appear before or after the command.\n"
             "hand and brief push ask before sending; add --yes to skip the prompt.\n"
             "wait does not resend. It runs hand only when --then hand ... is written out."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--json", action="store_true", help="print JSON; works before or after the command")
+    parser.add_argument("--json", action="store_true", help="print JSON instead of text; may appear before or after the command (default: text)")
     parser.add_argument("--version", action="version", version=f"trinity-cli {__version__}")
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("status", help="one line per seat; things waiting on you first")
+    sub.add_parser(
+        "status",
+        help="one line per seat; things waiting on you first (default command)",
+        description="one line per seat; things waiting on you first (default command)",
+    )
 
-    digest = sub.add_parser("digest", help="new messages from every seat in one timeline")
-    digest.add_argument("--since", help="look back from 30m, 2h, 1d, or an ISO time; does not move cursors")
-    digest.add_argument("--peek", action="store_true", help="show new messages without moving cursors")
-    digest.add_argument("--no-activity", action="store_true", help="skip Your dot activity (saves about 20s)")
-    digest.add_argument("--limit", type=int, help="messages per source (Your dot max 32, Grok Bot max 200)")
+    digest = sub.add_parser(
+        "digest",
+        help="new messages from every seat in one timeline; moves cursors after a successful print",
+        description="new messages from every seat in one timeline; moves cursors after a successful print",
+    )
+    digest.add_argument("--since", help="look back: 30m, 2h, 1d, 1w, or ISO time; does not move cursors (no default)")
+    digest.add_argument("--peek", action="store_true", help="show new messages without moving cursors (default: move them after printing)")
+    digest.add_argument("--no-activity", action="store_true", help="skip Your dot activity (default: include it; saves about 20s)")
+    digest.add_argument("--limit", type=int, help="messages for Your dot (1..32, default 30) and Grok (1..200, default 40); Muse stays at 40, max 100")
 
-    ask = sub.add_parser("ask", help="send the same text to seats and wait for each first reply")
-    ask.add_argument("seat", choices=("all", "dot", "grok", "muse"))
-    ask.add_argument("words", nargs="*", help="`ask grok BOT TEXT`, `ask all TEXT`, `ask dot TEXT`; no TEXT reads stdin")
-    ask.add_argument("--grok-bot", help="Grok bot to ask (default: TRINITY_GROK_BOT, or the only bot)")
-    ask.add_argument("--timeout", type=float, default=180.0, help="seconds to wait for each reply (default 180)")
+    ask = sub.add_parser(
+        "ask",
+        help="send the same text to seats and wait for each first reply; a timeout never resends",
+        description="send the same text to seats and wait for each first reply; a timeout never resends",
+    )
+    ask.add_argument("seat", choices=("all", "dot", "grok", "muse"), help="all, dot, grok, or muse")
+    ask.add_argument("words", nargs="*", help="message text; `ask grok NAME TEXT` names a bot when two or more words; empty reads stdin")
+    ask.add_argument("--grok-bot", help="Grok bot (default: --grok-bot, else TRINITY_GROK_BOT, else config grok_bot, else the only bot)")
+    ask.add_argument("--timeout", type=float, default=180.0, help="seconds to wait for each reply (default 180; no resend on timeout)")
     ask.add_argument("--poll", type=float, default=10.0, help="seconds between readbacks (default 10)")
 
-    hand = sub.add_parser("hand", help="forward one seat's reply to another, after a confirmation")
-    hand.add_argument("source", help="dot#last, grok:BOT#last, or grok:BOT#2 (2 = second newest reply)")
-    hand.add_argument("--to", required=True, dest="dest", help="dot, grok:BOT, or muse")
-    hand.add_argument("--yes", action="store_true", help="send without asking; required when stdin is not a terminal")
-    hand.add_argument("--timeout", type=float, default=180.0, help="seconds to wait for the destination reply (default 180)")
+    hand = sub.add_parser(
+        "hand",
+        help="forward one seat's reply to another, after a confirmation; does not chain",
+        description="forward one seat's reply to another, after a confirmation; does not chain",
+    )
+    hand.add_argument("source", help="dot#last, grok:BOT#last, muse#last, or #2 for the second newest reply")
+    hand.add_argument("--to", required=True, dest="dest", help="dot, grok, grok:BOT, or muse (required)")
+    hand.add_argument("--yes", action="store_true", help="send without asking (default: ask; required when stdin is not a terminal)")
+    hand.add_argument("--timeout", type=float, default=180.0, help="seconds to wait for the destination reply (default 180; no resend)")
     hand.add_argument("--poll", type=float, default=10.0, help="seconds between readbacks (default 10)")
-    hand.add_argument("instruction", nargs="*", help="what the destination should do with the forwarded reply")
+    hand.add_argument("instruction", nargs="*", help="what the destination should do with the forwarded reply (required)")
 
-    wait = sub.add_parser("wait", help="wait for a new reply; never resends")
-    wait.add_argument("spec", help="dot, or grok:BOT")
-    wait.add_argument("--timeout", type=float, default=180.0, help="seconds to wait (default 180)")
-    wait.add_argument("--poll", type=float, default=5.0, help="first gap between reads; it backs off (default 5)")
-    wait.add_argument("--notify", action="store_true", help="terminal bell and a macOS notification")
-    wait.add_argument("--then", nargs=argparse.REMAINDER, help="only `hand ...`, and only if a reply arrives; put this last")
+    wait = sub.add_parser(
+        "wait",
+        help="wait for a new reply after the ledger mark; never resends",
+        description="wait for a new reply after the ledger mark; never resends",
+    )
+    wait.add_argument("spec", help="dot, muse, grok, or grok:BOT (grok alone uses grok_bot)")
+    wait.add_argument("--timeout", type=float, default=180.0, help="seconds to wait (default 180; timeout does not send)")
+    wait.add_argument("--poll", type=float, default=5.0, help="first gap between reads, then doubles up to 30s (default 5)")
+    wait.add_argument("--notify", action="store_true", help="terminal bell and a macOS notification (default: off; no message body)")
+    wait.add_argument("--then", nargs=argparse.REMAINDER, help="only `hand ...`, and only if a reply arrives; put this last (default: do nothing)")
 
-    sub.add_parser("schedules", help="list automations per seat and flag duplicate titles")
+    sub.add_parser(
+        "schedules",
+        help="list automations per seat and flag duplicate titles; unsupported is not a failure",
+        description="list automations per seat and flag duplicate titles; unsupported is not a failure",
+    )
 
-    who = sub.add_parser("who", help="suggest a seat for a task; sends nothing")
-    who.add_argument("task", nargs="*", help="what you want done")
+    who = sub.add_parser(
+        "who",
+        help="suggest a seat for a task; sends nothing",
+        description="suggest a seat for a task; sends nothing",
+    )
+    who.add_argument("task", nargs="*", help="what you want done (required)")
 
-    brief = sub.add_parser("brief", help="show, diff, init, or push the local brief")
+    brief = sub.add_parser(
+        "brief",
+        help="show, init, diff, or push ~/.trinity-cli/brief.md",
+        description="show, init, diff, or push ~/.trinity-cli/brief.md",
+    )
     brief_sub = brief.add_subparsers(dest="brief_command")
-    brief_sub.add_parser("show", help="print ~/.trinity-cli/brief.md")
-    brief_sub.add_parser("init", help="write a short brief.md only when it does not exist")
-    brief_diff = brief_sub.add_parser("diff", help="compare the brief with each seat's instructions")
-    brief_diff.add_argument("--grok-bot", help="which Grok bot to compare")
-    brief_push = brief_sub.add_parser("push", help="write the brief to a seat that has an instruction API")
-    brief_push.add_argument("--yes", action="store_true", help="write without asking; never messages Your dot or Muse")
-    brief_push.add_argument("--grok-bot", help="which Grok bot to update")
+    brief_sub.add_parser("show", help="print ~/.trinity-cli/brief.md", description="print ~/.trinity-cli/brief.md")
+    brief_sub.add_parser(
+        "init",
+        help="write a short brief.md only when the file does not exist",
+        description="write a short brief.md only when the file does not exist",
+    )
+    brief_diff = brief_sub.add_parser(
+        "diff",
+        help="compare the brief with each seat; missing file exits 0",
+        description="compare the brief with each seat; missing file exits 0",
+    )
+    brief_diff.add_argument("--grok-bot", help="Grok bot to compare (default: grok_bot config or TRINITY_GROK_BOT)")
+    brief_push = brief_sub.add_parser(
+        "push",
+        help="write the brief to a Grok bot that has an instruction API; asks first",
+        description="write the brief to a Grok bot that has an instruction API; asks first",
+    )
+    brief_push.add_argument("--yes", action="store_true", help="write without asking (default: ask; never messages Your dot or Muse)")
+    brief_push.add_argument("--grok-bot", help="Grok bot to update (default: grok_bot config or TRINITY_GROK_BOT)")
 
-    login = sub.add_parser("login", help="sign in a seat; credentials are never printed")
-    login.add_argument("seat", choices=("dot", "grok", "muse"))
-    login.add_argument("--api-key", action="store_true", help="Muse only: pass an API key on stdin to `muse auth set`")
-    login.add_argument("--web", action="store_true", help="Muse only: headed `muse-web-cli login` (browser profile, not an API token)")
+    login = sub.add_parser(
+        "login",
+        help="sign in a seat through its own CLI; credentials are never printed",
+        description="sign in a seat through its own CLI; credentials are never printed",
+    )
+    login.add_argument("seat", choices=("dot", "grok", "muse"), help="dot (codex login), grok (app instructions only), or muse")
+    login.add_argument("--api-key", action="store_true", help="Muse only: pass an API key on stdin to `muse auth set` (default: browser muse login)")
+    login.add_argument("--web", action="store_true", help="Muse only: headed `muse-web-cli login` (default: muse login; cannot combine with --api-key)")
 
-    log = sub.add_parser("log", help="show the send ledger")
-    log.add_argument("--seat", choices=("dot", "grok", "muse"), help="only this seat")
-    log.add_argument("--since", help="30m, 2h, 1d, or an ISO time")
-    log.add_argument("--status", help="event, reply, or readback value, such as sent, replied, timed_out")
-    log.add_argument("--limit", type=int, default=50, help="how many matching lines to show (default 50)")
+    log = sub.add_parser("log", help="show the send ledger", description="show the send ledger")
+    log.add_argument("--seat", choices=("dot", "grok", "muse"), help="only this seat (default: every seat)")
+    log.add_argument("--since", help="30m, 2h, 1d, 1w, or an ISO time (default: all records)")
+    log.add_argument("--status", help="match event, reply, or readback, such as sent, replied, timed_out (default: any)")
+    log.add_argument("--limit", type=int, default=50, help="how many matching lines to show (default 50, minimum 1)")
     return parser
 
 
@@ -168,6 +233,7 @@ def main(
     sleep=None,
     notifier=None,
 ) -> int:
+    configure_stdio()
     parser = build_parser()
     raw = list(sys.argv[1:] if argv is None else argv)
     cleaned, as_json = _split_globals(raw)

@@ -37,7 +37,12 @@ from trinity_cli.util import (
 
 TRANSCRIPT_LIMIT = 40
 FIRST_READ = 10
-GBOT_FALLBACKS = ("~/.nvm/versions/node/*/bin/gbot", "/opt/homebrew/bin/gbot", "/usr/local/bin/gbot")
+GBOT_FALLBACKS = (
+    "~/.nvm/versions/node/*/bin/gbot",
+    "/opt/homebrew/bin/gbot",
+    "/usr/local/bin/gbot",
+    "~/AppData/Roaming/npm/gbot.cmd",
+)
 FIX_APP = "打開 Grok Bot app 確認已登入，再跑 `gbot doctor`"
 FIX_INSTALL = "安裝 gbot（見 README）或設定 TRINITY_GBOT"
 FIX_AMBIGUOUS = (

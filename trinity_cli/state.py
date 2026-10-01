@@ -9,7 +9,10 @@ from pathlib import Path
 
 
 def home() -> Path:
-    return Path(os.environ.get("TRINITY_HOME") or "~/.trinity-cli").expanduser()
+    override = os.environ.get("TRINITY_HOME")
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".trinity-cli"
 
 
 class State:

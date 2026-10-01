@@ -1,4 +1,10 @@
-"""The only place trinity starts other programs."""
+"""The only place trinity starts other programs.
+
+Arguments are always a list, never `shell=True`. On Windows, `shutil.which`
+returns npm shims such as `gbot.cmd`; those are started with `cmd.exe /d /s /c`
+so CreateProcess can run them. A timeout kills the child with `proc.kill()` on
+POSIX and `taskkill /T` on Windows. Output is decoded as UTF-8.
+"""
 
 from __future__ import annotations
 
@@ -22,6 +28,36 @@ class Proc:
     timed_out: bool = False
 
 
+def command_argv(argv: list[str]) -> list[str]:
+    """Keep Windows batch shims runnable without shell=True."""
+    if os.name == "nt" and argv and argv[0].lower().endswith((".cmd", ".bat")):
+        comspec = os.environ.get("COMSPEC") or "cmd.exe"
+        return [comspec, "/d", "/s", "/c", *argv]
+    return list(argv)
+
+
+def _pop_kwargs() -> dict:
+    kwargs = {"shell": False}
+    if os.name == "nt":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    return kwargs
+
+
+def _terminate(proc: subprocess.Popen) -> None:
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=15,
+            check=False,
+            shell=False,
+        )
+        return
+    proc.kill()
+
+
 class Runner:
     def run(
         self,
@@ -31,33 +67,50 @@ class Runner:
         timeout: float = 60.0,
         env: dict | None = None,
     ) -> Proc:
+        name = os.path.basename(argv[0]) if argv else "command"
         try:
-            done = subprocess.run(
-                argv,
-                input=stdin,
-                capture_output=True,
+            proc = subprocess.Popen(
+                command_argv(argv),
+                stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=timeout,
                 env=env,
-                stdin=None if stdin is not None else subprocess.DEVNULL,
+                **_pop_kwargs(),
             )
         except FileNotFoundError:
-            return Proc(127, "", f"{os.path.basename(argv[0])}: not found")
+            return Proc(127, "", f"{name}: not found")
+        try:
+            out, err = proc.communicate(input=stdin, timeout=timeout)
         except subprocess.TimeoutExpired:
-            return Proc(124, "", f"{os.path.basename(argv[0])} timed out after {timeout:.0f}s", timed_out=True)
-        return Proc(done.returncode, done.stdout or "", done.stderr or "")
+            _terminate(proc)
+            try:
+                proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+            return Proc(124, "", f"{name} timed out after {timeout:.0f}s", timed_out=True)
+        return Proc(proc.returncode or 0, out or "", err or "")
 
     def attach(self, argv: list[str], *, timeout: float = LOGIN_TIMEOUT) -> Proc:
         """Run with the caller's terminal. stdout and stderr are not captured."""
         try:
-            done = subprocess.run(argv, timeout=timeout)
+            proc = subprocess.Popen(command_argv(argv), **_pop_kwargs())
         except FileNotFoundError:
             return Proc(127, "", "")
+        try:
+            code = proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
+            _terminate(proc)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
             return Proc(124, "", "", timed_out=True)
-        return Proc(done.returncode, "", "")
+        return Proc(code, "", "")
 
 
 def find_tool(name: str, env_var: str, fallbacks: tuple[str, ...] = ()) -> str | None:

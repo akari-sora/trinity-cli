@@ -27,8 +27,9 @@ Reply in the user's language.
 6. Run `trinity-cli wait SEAT [--timeout] [--notify]` to watch for a new reply. If it times out, stop. Do not send, and do not add `--then hand` unless the user wrote that hop themselves.
 7. Run `trinity-cli schedules` to list automations and any duplicate titles. Run `trinity-cli who "task"` when the user asks which seat fits. Quote it as a suggestion. Do not send because of it.
 8. The shared brief is `~/.trinity-cli/brief.md`. Use `brief show` and `brief diff` freely. If the file is missing, `brief diff` exits 0 and points at `brief init`. `brief init` writes a short template only when the file does not exist. `brief diff` may read Muse memory; that read does not write. Use `brief push` only when the user asked to update instructions. It can write a Grok bot's instructions after confirmation; Your dot and Muse only get a draft, and that draft must not be sent with `ask` unless the user asked for a send.
-9. Use `trinity-cli log` to read the ledger. Use `--json` when you need to parse output.
+9. Use `trinity-cli log` to read the ledger. Use `--json` when you need to parse output. `log --limit` defaults to 50 and must be at least 1.
 10. Run `trinity-cli login muse` only when the user asked to sign Muse in or obtain its token. It runs the public `muse login` (browser approval). `--api-key` passes stdin to `muse auth set --api-key-stdin`. `--web` runs `muse-web-cli login` for the browser seat. Do not read or print the credential, and do not copy it into `~/.trinity-cli/muse-credential`; the user places that file. `login dot` runs `codex login`. `login grok` only repeats the Grok Bot app instructions. A missing api credential on status is `trinity-cli login muse`, not the browser login.
+11. For one seat's own commands, use the `chatgpt-dot-cli` and `muse-web-cli` skills, and `gbot --help`. This skill is only the wrapper: https://gitlab.com/aa22396584/trinity-cli https://gitlab.com/aa22396584/chatgpt-dot-cli https://gitlab.com/aa22396584/grok-bot-cli https://github.com/ImL1s/grok-bot-cli https://gitlab.com/aa22396584/muse-web-cli
 
 Rules:
 
