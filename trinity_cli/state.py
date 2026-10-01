@@ -60,9 +60,12 @@ class Ledger:
     def append(self, record: dict) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         new = not self.path.exists()
-        # Binary UTF-8 with a single \n. Windows text mode would turn \n into
-        # \r\n and can split a later read in the middle of a record.
-        line = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
+        # Binary UTF-8 with a single \n. json.dumps leaves U+2028/U+2029/U+0085
+        # raw, and str.splitlines() treats those as line breaks.
+        text = json.dumps(record, ensure_ascii=False)
+        for char, escaped in (("\u2028", "\\u2028"), ("\u2029", "\\u2029"), ("\u0085", "\\u0085")):
+            text = text.replace(char, escaped)
+        line = (text + "\n").encode("utf-8")
         with open(self.path, "ab") as handle:
             handle.write(line)
             handle.flush()
@@ -76,8 +79,9 @@ class Ledger:
         except FileNotFoundError:
             return []
         rows = []
-        for line in raw.decode("utf-8").splitlines():
-            if not line.strip():
+        for line in raw.decode("utf-8").split("\n"):
+            line = line.rstrip("\r").strip()
+            if not line:
                 continue
             try:
                 rows.append(json.loads(line))

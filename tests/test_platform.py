@@ -7,6 +7,7 @@ from unittest import mock
 
 from trinity_cli.cli import configure_stdio
 from trinity_cli.runner import Runner, command_argv, find_tool
+from trinity_cli.state import Ledger
 from trinity_cli.seats.muse import credential_mode_fix
 
 
@@ -134,6 +135,17 @@ class PlatformTests(unittest.TestCase):
         self.assertIn("os.replace", source)
         self.assertNotIn("fcntl", source)
         self.assertIn("Path.home()", source)
+
+    def test_ledger_roundtrip_keeps_unicode_line_separators(self):
+        import tempfile
+        from pathlib import Path
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        book = Ledger(Path(tmp.name) / "ledger.jsonl")
+        book.append({"at": "2026-10-01T00:00:00+00:00", "note": "a\u2028b\u2029c\u0085d蝴蝶"})
+        self.assertEqual(book.records(), [{"at": "2026-10-01T00:00:00+00:00", "note": "a\u2028b\u2029c\u0085d蝴蝶"}])
+        self.assertNotIn("\n", Path(tmp.name, "ledger.jsonl").read_bytes().decode("utf-8").split("\n")[0])
 
     def test_windows_stdio_is_reconfigured_to_utf8(self):
         stream = mock.Mock()
