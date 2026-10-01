@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from trinity_cli.redact import scrub_ids
+
 OK = "ok"
 FAILED = "failed"
 UNSUPPORTED = "unsupported"
@@ -25,11 +27,11 @@ class Result:
 
     @classmethod
     def failed(cls, error: str, hint: str = "") -> "Result":
-        return cls(FAILED, None, error, hint)
+        return cls(FAILED, None, scrub_ids(error or ""), scrub_ids(hint or ""))
 
     @classmethod
     def unsupported(cls, reason: str) -> "Result":
-        return cls(UNSUPPORTED, None, reason)
+        return cls(UNSUPPORTED, None, scrub_ids(reason or ""))
 
 
 @dataclass

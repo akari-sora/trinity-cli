@@ -28,7 +28,7 @@ from trinity_cli.app import (
 from trinity_cli.briefing import run_diff, run_init, run_push, run_show
 from trinity_cli.forward import run_hand, run_wait
 from trinity_cli.ledger_view import run_log
-from trinity_cli.redact import scrub
+from trinity_cli.redact import scrub, scrub_ids
 from trinity_cli.runner import Runner
 from trinity_cli.seats import build_seats
 from trinity_cli.seats.grok import GrokSeat
@@ -626,9 +626,10 @@ def cmd_login(seats, args, out, err, as_json: bool) -> int:
         mode = "token"
     result = seat.login(mode=mode)
     ok = result.state == "ok"
-    message = str(result.value) if ok else result.error
-    text = f"{message}\n{result.hint}" if result.hint else message
-    data = {"seat": args.seat, "ok": ok, "message": message, "hint": result.hint}
+    message = scrub_ids(str(result.value) if ok else (result.error or ""))
+    hint = scrub_ids(result.hint or "")
+    text = f"{message}\n{hint}" if hint else message
+    data = {"seat": args.seat, "ok": ok, "message": message, "hint": hint}
     emit(out, dumps(data) if as_json else text)
     if ok:
         return 0

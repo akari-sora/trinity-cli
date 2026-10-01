@@ -13,12 +13,15 @@ from __future__ import annotations
 from datetime import datetime
 
 from trinity_cli.model import CAPABILITIES, Result, SendReceipt
+from trinity_cli.redact import scrub_ids
 
 
 class Problem(Exception):
     """Raised inside an adapter; capability methods turn it into Result.failed."""
 
     def __init__(self, error: str, hint: str = ""):
+        error = scrub_ids(error or "")
+        hint = scrub_ids(hint or "")
         super().__init__(error)
         self.error = error
         self.hint = hint

@@ -164,5 +164,60 @@ class OtherSeatLoginTests(unittest.TestCase):
         self.assertNotIn(FAKE_JWT, text)
 
 
+    def test_region_blocked_keeps_its_hint(self):
+        payload = {
+            "state": "region_blocked",
+            "logged_in": False,
+            "wrote": False,
+            "error": "Muse 在這個地區無法使用。",
+            "hint": "這個工具不會繞過地區限制。",
+        }
+        code, text, err = _run([_seat(payload)], "login", "muse")
+        self.assertEqual(code, 1)
+        self.assertNotIn("尚未登入", text)
+        self.assertIn("地區", text)
+        self.assertIn("不會繞過", text)
+        self.assertNotIn("尚未登入", err)
+
+    def test_browser_down_keeps_its_state(self):
+        payload = {"state": "browser_down", "logged_in": False, "wrote": False, "error": "Muse 的瀏覽器沒有啟動"}
+        code, text, err = _run([_seat(payload)], "login", "muse")
+        self.assertEqual(code, 1)
+        self.assertNotIn("尚未登入", text)
+        self.assertIn("瀏覽器", text)
+        self.assertIn("start --headless", text)
+        self.assertNotIn("尚未登入", err)
+
+    def test_profile_busy_keeps_its_hint(self):
+        payload = {"state": "profile_busy", "logged_in": False, "wrote": False}
+        code, text, err = _run([_seat(payload)], "login", "muse")
+        self.assertEqual(code, 1)
+        self.assertNotIn("尚未登入", text)
+        self.assertIn("佔用", text)
+        self.assertNotIn("尚未登入", err)
+
+    def test_login_error_scrubs_token_shapes(self):
+        secret = "unit-secret-value"
+        payload = {
+            "state": "ui_changed",
+            "logged_in": True,
+            "wrote": False,
+            "error": f'auth_token={secret} {{"token": "{secret}"}} Authorization: Bearer {secret} {FAKE_JWT}',
+            "hint": f"下一步 auth_token={secret}",
+        }
+        runner = _runner(_proc(3, json.dumps(payload), f"err auth_token={secret} Bearer {secret} {FAKE_JWT}"))
+        code, text, err = _run([MuseSeat(runner, binary="muse-web-cli")], "login", "muse")
+        self.assertEqual(code, 1)
+        for blob in (text, err):
+            self.assertNotIn(secret, blob)
+            self.assertNotIn(FAKE_JWT, blob)
+            self.assertNotIn(f"auth_token={secret}", blob)
+            self.assertNotIn(f"Bearer {secret}", blob)
+
+
+def _seat(payload, code=3):
+    return MuseSeat(_runner(_proc(code, json.dumps(payload))), binary="muse-web-cli")
+
+
 if __name__ == "__main__":
     unittest.main()

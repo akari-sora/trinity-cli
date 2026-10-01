@@ -13,7 +13,7 @@ digest can say 可能漏看.
 
 `instructions` stays on the base class: Muse has no instruction API, so
 `brief push` prints a draft. `memory` is read-only and only used by `brief diff`.
-muse-web-cli v0.1.2 accepts `--backend browser|api`. trinity passes it when a
+muse-web-cli v0.1.3 accepts `--backend browser|api`. trinity passes it when a
 choice is resolved: CLI `--muse-backend`, then config `muse_backend`, then
 `MUSE_WEB_BACKEND`. With no choice, trinity omits `--backend`. `auto` tries api
 first and, on exit 4, retries that capability on browser. A send that timed out
@@ -278,7 +278,7 @@ class MuseSeat(Seat):
         if payload.get("wrote") is True and state in {"", "ok"} and proc.code == 0 and not proc.timed_out:
             listed = "、".join(names) if names else "憑證欄位"
             return Result.ok(f"{_TOKEN_OK} 有值的欄位：{listed}。")
-        if payload.get("logged_in") is False or state == "session_expired":
+        if state == "session_expired" or (payload.get("logged_in") is False and state in {"", "ok"}):
             return Result.failed("尚未登入。", "請在開啟的 Chrome 視窗登入 Muse。這個工具不會輸入帳號密碼。")
         if not payload and proc.code != 0:
             return Result.failed("沒有寫入 ~/.trinity-cli/muse-credential。", "再執行一次 `trinity-cli login muse`")

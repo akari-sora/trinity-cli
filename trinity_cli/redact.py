@@ -10,7 +10,7 @@ _SECRETS = (
     re.compile(r"\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}"),
     re.compile(r"\b(?:gh[pousr]_|github_pat_|glpat-|xox[abpr]-)[A-Za-z0-9_-]{16,}"),
     re.compile(
-        r"(?i)\b((?:access|refresh|id|session|gateway)?_?token|api[_-]?key|secret|password|cookie)"
+        r"(?i)\b((?:auth_token|notary_token|(?:access|refresh|id|session|gateway)?_?token)|api[_-]?key|secret|password|cookie)"
         r"(\"?\s*[:=]\s*\"?)[^\s\",}]+"
     ),
 )
