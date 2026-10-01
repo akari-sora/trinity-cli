@@ -7,13 +7,14 @@ import time
 from datetime import datetime
 
 from trinity_cli.app import ask_exit, ask_json, ask_one, call, render_ask
+from trinity_cli.targets import find_seat
 from trinity_cli.model import OK, UNSUPPORTED, Batch, Message, ReadOutcome, Result
 from trinity_cli.redact import scrub
 from trinity_cli.shown import Shown
 from trinity_cli.state import Ledger
 from trinity_cli.util import WINDOW_CURSOR, has_nonce, iso, local_stamp, new_nonce, now_utc, one_line, parse_time
 
-_SPEC = re.compile(r"^(?P<seat>dot|grok|muse)(?::(?P<target>[^#]+))?(?:#(?P<sel>last|[1-9]\d*))?$")
+_SPEC = re.compile(r"^(?P<seat>[A-Za-z][A-Za-z0-9-]*)(?::(?P<target>[^#]+))?(?:#(?P<sel>last|[1-9]\d*))?$")
 _YES = {"y", "yes", "是"}
 
 
@@ -40,7 +41,7 @@ def parse_spec(text: str) -> tuple[str, str | None, str | None]:
 
 
 def _find(seats, key: str):
-    return next((seat for seat in seats if seat.key == key), None)
+    return find_seat(seats, key)
 
 
 def _label(seat, target: str | None) -> str:

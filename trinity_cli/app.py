@@ -12,7 +12,7 @@ from trinity_cli.model import FAILED, OK, UNSUPPORTED, Message, ReadOutcome, Res
 from trinity_cli.redact import scrub_ids
 from trinity_cli.seats.base import Seat
 from trinity_cli.state import Ledger
-from trinity_cli.util import iso, local_stamp, now_utc, one_line
+from trinity_cli.util import iso, local_stamp, new_nonce, now_utc, one_line
 
 NOT_EMPTY = "（這不代表沒有新訊息）"
 
@@ -43,8 +43,22 @@ def collect_status(seats: list[Seat]) -> list[tuple[Seat, Result]]:
     return list(zip(seats, each(seats, lambda seat: call(seat, "status"))))
 
 
+def aggregate_exit(states: list[str]) -> int:
+    """Non-zero only when every seat that can answer failed.
+
+    Unsupported seats are ignored. A mix of success and failure is exit 0;
+    the failure is still printed.
+    """
+    actionable = [state for state in states if state != UNSUPPORTED]
+    if not actionable:
+        return 0
+    if all(state in {FAILED, "timed_out"} for state in actionable):
+        return 1
+    return 0
+
+
 def status_exit(reports: list[tuple[Seat, Result]]) -> int:
-    return 1 if any(r.state == FAILED for _, r in reports) else 0
+    return aggregate_exit([r.state for _, r in reports])
 
 
 def render_status(reports: list[tuple[Seat, Result]]) -> str:
@@ -197,6 +211,7 @@ class AskRow:
     reply: Message | None = None
     error: str = ""
     hint: str = ""
+    nonce: str = ""
 
 
 def ask_one(
@@ -214,16 +229,16 @@ def ask_one(
     label = seat.label if target is None else f"{seat.label}/{target}"
     if not seat.supports("send"):
         reason = call(seat, "send", target, text, nonce)
-        return AskRow(seat, label, UNSUPPORTED, error=reason.error or seat.unsupported_reason)
+        return AskRow(seat, label, UNSUPPORTED, error=reason.error or seat.unsupported_reason, nonce=nonce)
     base = {"ask_id": ask_id, "seat": seat.key, "target": label, "nonce": nonce}
     ledger.append({**base, "event": "sending", "at": iso(now())})
     sent = call(seat, "send", target, text, nonce)
     if sent.state == UNSUPPORTED:
         ledger.append({**base, "event": "unsupported", "error": sent.error, "at": iso(now())})
-        return AskRow(seat, label, UNSUPPORTED, error=sent.error)
+        return AskRow(seat, label, UNSUPPORTED, error=sent.error, nonce=nonce)
     if sent.state != OK:
         ledger.append({**base, "event": "not_sent", "error": sent.error, "at": iso(now())})
-        return AskRow(seat, label, FAILED, send="not_sent", error=sent.error, hint=sent.hint)
+        return AskRow(seat, label, FAILED, send="not_sent", error=sent.error, hint=sent.hint, nonce=nonce)
     receipt = sent.value
     base["target"] = receipt.target
     ledger.append({**base, "event": "sent", "sent_at": iso(receipt.sent_at), "delivery": receipt.delivery, "error": receipt.error})
@@ -231,7 +246,7 @@ def ask_one(
     if waited.state != OK:
         ledger.append({**base, "event": "result", "sent_at": iso(receipt.sent_at), "delivery": receipt.delivery,
                        "readback": "unknown", "reply": "error", "error": waited.error, "at": iso(now())})
-        return AskRow(seat, receipt.target, FAILED, send=receipt.delivery, readback="unknown", error=waited.error, hint=waited.hint)
+        return AskRow(seat, receipt.target, FAILED, send=receipt.delivery, readback="unknown", error=waited.error, hint=waited.hint, nonce=nonce)
     outcome: WaitOutcome = waited.value
     readback = {True: "confirmed", False: "not_seen", None: "unknown"}[outcome.delivered]
     ledger.append({
@@ -247,18 +262,24 @@ def ask_one(
     })
     state = "replied" if outcome.reply else "timed_out"
     return AskRow(seat, receipt.target, state, send=receipt.delivery, readback=readback, reply=outcome.reply,
-                  error=outcome.error or receipt.error)
+                  error=outcome.error or receipt.error, nonce=nonce)
 
 
-def run_ask(pairs: list[tuple[Seat, str | None]], text: str, nonce: str, **kwargs) -> list[AskRow]:
+def run_ask(pairs: list[tuple[Seat, str | None]], text: str, nonce: str | None = None, **kwargs) -> list[AskRow]:
+    """Each pair gets its own nonce. The optional nonce is only used when there is one pair."""
     if not pairs:
         return []
+
+    def once(pair: tuple[Seat, str | None]) -> AskRow:
+        own = nonce if nonce and len(pairs) == 1 else new_nonce()
+        return ask_one(pair[0], pair[1], text, own, **kwargs)
+
     with ThreadPoolExecutor(max_workers=len(pairs)) as pool:
-        return list(pool.map(lambda pair: ask_one(pair[0], pair[1], text, nonce, **kwargs), pairs))
+        return list(pool.map(once, pairs))
 
 
 def ask_exit(rows: list[AskRow]) -> int:
-    return 0 if all(row.state in ("replied", UNSUPPORTED) for row in rows) else 1
+    return aggregate_exit([row.state for row in rows])
 
 
 def _row_lines(row: AskRow, timeout: float) -> list[str]:
@@ -306,7 +327,8 @@ def _pad(text: str, width: int) -> str:
 def render_ask(rows: list[AskRow], *, nonce: str, timeout: float, ledger_path: str, columns: int | None = None) -> str:
     columns = columns or shutil.get_terminal_size((120, 24)).columns
     blocks = [(row.target, _row_lines(row, timeout)) for row in rows]
-    footer = f"nonce {nonce} · 送出紀錄：{ledger_path}"
+    tags = " · ".join(f"nonce {row.nonce}" for row in rows if row.nonce) or f"nonce {nonce}"
+    footer = f"{tags} · 送出紀錄：{ledger_path}"
     count = len(blocks)
     col = (columns - 3 * (count - 1)) // count if count else columns
     if count <= 1 or col < 24:
@@ -337,6 +359,7 @@ def ask_json(rows: list[AskRow], *, ask_id: str, nonce: str) -> dict:
             {
                 "seat": row.seat.key,
                 "target": row.target,
+                "nonce": row.nonce or nonce,
                 "state": row.state,
                 "send": row.send,
                 "readback": row.readback,

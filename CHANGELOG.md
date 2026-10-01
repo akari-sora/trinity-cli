@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- 多個 Grok 座位。`grok_seats` 用座位名、登入標籤和 bot 名稱；`grok_default` 是 `grok` 指向的那個。舊的 `gbot_account` 加 `grok_bot` 仍是一個名叫 `grok` 的座位。改寫設定前會備份。
+- `status`、`digest`、`ask`、`hand`、`wait`、`schedules`、`who`、`brief push`、`log` 都接受座位名。`all` 是 dot、每個啟用的 Grok 座位、再加上 muse。每次送出有自己的 nonce，逾時不重送。
+- `ask`、`wait`、`digest` 可用 `--bot` 和 `--account` 臨時連到沒寫進設定的 bot。名字跨登入重複時必須給 `--account`。
+- `trinity-cli grok bots` 列出每個登入上的 bot，不印 id。404 顯示 `unreachable: sandbox gone — re-login this account in the Grok Bot app`。`grok add` 和 `grok remove` 會先備份。
+- 讀取位置依座位分開，印完才前進。一個座位不可達不會讓其他座位停掉。結束碼 1 只在這次點到、且算數的座位全部失敗或逾時。
+- 座位工具釘選不變：chatgpt-dot-cli v0.2.2、gbot fork v0.11.2-iml1s.2、muse-web-cli v0.1.2。
+
 ## 0.3.3
 
 - 座位工具釘在 `chatgpt-dot-cli` v0.2.2、gbot fork v0.11.2-iml1s.2、`muse-web-cli` v0.1.2。

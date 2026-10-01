@@ -75,7 +75,7 @@ class DigestCursorTests(unittest.TestCase):
         self.state.save_cursors({"b.messages": {"id": "old"}})
         bad = FakeSeat("b", "Beta", read=Result.failed("讀不到", "修好它"))
         code, text = self.digest([batch_seat(), bad, unsupported_muse()])
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)
         self.assertIn("✗ Beta 讀取失敗：讀不到 → 修好它（這不代表沒有新訊息）", text)
         self.assertIn("– Muse：不支援", text)
         self.assertEqual(self.state.cursors()["b.messages"], {"id": "old"})
@@ -85,7 +85,7 @@ class DigestCursorTests(unittest.TestCase):
         bad = FakeSeat("b", "Beta", read=Result.failed("讀不到", "修好它"))
         empty = batch_seat(items=[], cursor={"id": "m0"})
         code, text = self.digest([empty, bad])
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)
         self.assertNotIn("沒有新訊息。", text)
         self.assertIn("失敗的來源請看上面", text)
 

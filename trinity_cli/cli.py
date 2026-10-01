@@ -9,7 +9,11 @@ from datetime import datetime, timezone
 
 from trinity_cli import __version__
 from trinity_cli.advise import run_who
+from trinity_cli.config import add_grok_seat, remove_grok_seat
+from trinity_cli.grok_admin import bots_json, discover, render_bots
+from trinity_cli.model import FAILED, ReadOutcome
 from trinity_cli.app import (
+    aggregate_exit,
     ask_exit,
     ask_json,
     build_digest,
@@ -27,6 +31,8 @@ from trinity_cli.ledger_view import run_log
 from trinity_cli.redact import scrub
 from trinity_cli.runner import Runner
 from trinity_cli.seats import build_seats
+from trinity_cli.seats.grok import GrokSeat
+from trinity_cli.targets import default_grok, find_seat, grok_seats
 from trinity_cli.state import Ledger, State, home
 from trinity_cli.schedule_report import run_schedules
 from trinity_cli.shown import Shown
@@ -58,9 +64,11 @@ def build_parser() -> argparse.ArgumentParser:
             "  trinity-cli digest --peek\n"
             "  trinity-cli digest --since 2h\n"
             "  trinity-cli ask all \"今天進度？\"\n"
-            "  trinity-cli ask grok 蝴蝶 \"read back the last handoff\"\n"
-            "  trinity-cli hand dot#last --to grok:蝴蝶 \"請看這則\"\n"
-            "  trinity-cli wait grok:蝴蝶 --notify\n"
+            "  trinity-cli ask grok-a \"read back the last handoff\"\n"
+            "  trinity-cli ask grok --bot \"Other\" --account example-login \"hello\"\n"
+            "  trinity-cli grok bots\n"
+            "  trinity-cli hand dot#last --to grok-a \"請看這則\"\n"
+            "  trinity-cli wait grok --notify\n"
             "  trinity-cli schedules\n"
             "  trinity-cli who \"翻譯這段\"\n"
             "  trinity-cli brief init\n"
@@ -93,15 +101,19 @@ def build_parser() -> argparse.ArgumentParser:
     digest.add_argument("--peek", action="store_true", help="show new messages without moving cursors (default: move them after printing)")
     digest.add_argument("--no-activity", action="store_true", help="skip Your dot activity (default: include it; saves about 20s)")
     digest.add_argument("--limit", type=int, help="messages for Your dot (1..32, default 30) and Grok (1..200, default 40); Muse stays at 40, max 100")
+    digest.add_argument("--bot", help="read this Grok bot instead of the configured Grok seats (default: configured seats)")
+    digest.add_argument("--account", help="gbot login label for --bot; required when that name exists on more than one login")
 
     ask = sub.add_parser(
         "ask",
         help="send the same text to seats and wait for each first reply; a timeout never resends",
         description="send the same text to seats and wait for each first reply; a timeout never resends",
     )
-    ask.add_argument("seat", choices=("all", "dot", "grok", "muse"), help="all, dot, grok, or muse")
+    ask.add_argument("seat", help="all, dot, muse, grok (the default Grok seat), or a seat name such as grok-a")
     ask.add_argument("words", nargs="*", help="message text; `ask grok NAME TEXT` names a bot when two or more words; empty reads stdin")
-    ask.add_argument("--grok-bot", help="Grok bot (default: --grok-bot, else TRINITY_GROK_BOT, else config grok_bot, else the only bot)")
+    ask.add_argument("--grok-bot", help="Grok bot on the default seat (default: that seat's bot)")
+    ask.add_argument("--bot", help="any Grok bot, configured or not (default: the seat's bot)")
+    ask.add_argument("--account", help="gbot login label for --bot; required when that name exists on more than one login")
     ask.add_argument("--timeout", type=float, default=180.0, help="seconds to wait for each reply (default 180; no resend on timeout)")
     ask.add_argument("--poll", type=float, default=10.0, help="seconds between readbacks (default 10)")
 
@@ -127,6 +139,8 @@ def build_parser() -> argparse.ArgumentParser:
     wait.add_argument("--poll", type=float, default=5.0, help="first gap between reads, then doubles up to 30s (default 5)")
     wait.add_argument("--notify", action="store_true", help="terminal bell and a macOS notification (default: off; no message body)")
     wait.add_argument("--then", nargs=argparse.REMAINDER, help="only `hand ...`, and only if a reply arrives; put this last (default: do nothing)")
+    wait.add_argument("--bot", help="wait on this Grok bot instead of a configured seat (default: the seat in spec)")
+    wait.add_argument("--account", help="gbot login label for --bot; required when that name exists on more than one login")
 
     sub.add_parser(
         "schedules",
@@ -158,14 +172,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="compare the brief with each seat; missing file exits 0",
         description="compare the brief with each seat; missing file exits 0",
     )
-    brief_diff.add_argument("--grok-bot", help="Grok bot to compare (default: grok_bot config or TRINITY_GROK_BOT)")
+    brief_diff.add_argument("--grok-bot", help="Grok bot to compare (default: the selected seat's bot)")
+    brief_diff.add_argument("--seat", help="which Grok seat to compare (default: grok_default, or grok)")
     brief_push = brief_sub.add_parser(
         "push",
         help="write the brief to a Grok bot that has an instruction API; asks first",
         description="write the brief to a Grok bot that has an instruction API; asks first",
     )
     brief_push.add_argument("--yes", action="store_true", help="write without asking (default: ask; never messages Your dot or Muse)")
-    brief_push.add_argument("--grok-bot", help="Grok bot to update (default: grok_bot config or TRINITY_GROK_BOT)")
+    brief_push.add_argument("--grok-bot", help="Grok bot to update (default: the selected seat's bot)")
+    brief_push.add_argument("--seat", help="which Grok seat to update (default: grok_default, or grok)")
 
     login = sub.add_parser(
         "login",
@@ -177,7 +193,34 @@ def build_parser() -> argparse.ArgumentParser:
     login.add_argument("--web", action="store_true", help="Muse only: headed `muse-web-cli login` (default: muse login; cannot combine with --api-key)")
 
     log = sub.add_parser("log", help="show the send ledger", description="show the send ledger")
-    log.add_argument("--seat", choices=("dot", "grok", "muse"), help="only this seat (default: every seat)")
+    log.add_argument("--seat", help="only this seat: dot, muse, grok (the default Grok seat), or a name such as grok-a (default: every seat)")
+
+    grok = sub.add_parser(
+        "grok",
+        help="list Grok bots across logins, or add and remove seats",
+        description="list Grok bots across logins, or add and remove seats",
+    )
+    grok_sub = grok.add_subparsers(dest="grok_command")
+    grok_sub.add_parser(
+        "bots",
+        help="list every bot on every gbot login; no raw ids",
+        description="list every bot on every gbot login; no raw ids",
+    )
+    grok_add = grok_sub.add_parser(
+        "add",
+        help="add a named Grok seat to config.json after a backup",
+        description="add a named Grok seat to config.json after a backup",
+    )
+    grok_add.add_argument("name", help="seat name, such as grok-a")
+    grok_add.add_argument("--account", required=True, help="gbot login label (required)")
+    grok_add.add_argument("--bot", required=True, help="bot name on that login (required)")
+    grok_add.add_argument("--default", action="store_true", help="make this seat the default grok target (default: keep grok_default)")
+    grok_remove = grok_sub.add_parser(
+        "remove",
+        help="remove a named Grok seat from config.json after a backup",
+        description="remove a named Grok seat from config.json after a backup",
+    )
+    grok_remove.add_argument("name", help="seat name to remove")
     log.add_argument("--since", help="30m, 2h, 1d, 1w, or an ISO time (default: all records)")
     log.add_argument("--status", help="match event, reply, or readback, such as sent, replied, timed_out (default: any)")
     log.add_argument("--limit", type=int, default=50, help="how many matching lines to show (default 50, minimum 1)")
@@ -219,6 +262,59 @@ def macos_notify(title: str, body: str) -> None:
     Runner().run(["osascript", "-e", script], timeout=10)
 
 
+def _is_grok(seat) -> bool:
+    return seat.key == "grok" or str(seat.key).startswith("grok-")
+
+
+def _resolve_bot(seats, bot: str, account: str | None, *, allow_discover: bool):
+    matches = []
+    for seat in grok_seats(seats):
+        name = getattr(seat, "pinned_bot", None) or getattr(seat, "default_bot", None)
+        if name == bot:
+            matches.append(seat)
+    if account:
+        same = [seat for seat in matches if getattr(seat, "account", None) == account]
+        if len(same) == 1:
+            return same[0], None
+        template = default_grok(seats) or (matches[0] if matches else None)
+        return (
+            GrokSeat(
+                getattr(template, "runner", None),
+                binary=getattr(template, "binary", None) if template else None,
+                seat_name="grok",
+                account=account,
+                pinned_bot=bot,
+                is_default=True,
+            ),
+            None,
+        )
+    if len(matches) == 1:
+        return matches[0], None
+    if len(matches) > 1:
+        return None, "這個 bot 名稱出現在多個登入，請加上 --account"
+    if allow_discover:
+        template = default_grok(seats)
+        rows = discover(getattr(template, "runner", None) or Runner(), getattr(template, "binary", None))
+        found = {row["account"] for row in rows if row.get("reachable") and row.get("name") == bot and row.get("account")}
+        if len(found) == 1:
+            return _resolve_bot(seats, bot, next(iter(found)), allow_discover=False)
+        if len(found) > 1:
+            return None, "這個 bot 名稱出現在多個登入，請加上 --account"
+        return None, "找不到這個 bot。用 `trinity-cli grok bots` 看名稱和登入。"
+    return None, "請加上 --account。bot 名稱可能跨登入重複。"
+
+
+def _with_adhoc(seats, bot: str | None, account: str | None, *, allow_discover: bool):
+    if not bot and not account:
+        return seats, None
+    if not bot:
+        return None, "用了 --account 就要加 --bot。"
+    seat, error = _resolve_bot(seats, bot, account, allow_discover=allow_discover)
+    if error:
+        return None, error
+    return [item for item in seats if not _is_grok(item)] + [seat], None
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -242,6 +338,7 @@ def main(
     out = out or sys.stdout
     err = err or sys.stderr
     no_activity = bool(getattr(args, "no_activity", False))
+    allow_discover = seats is None
     if seats is None:
         seats = build_seats(grok_bot=getattr(args, "grok_bot", None), include_activity=not no_activity)
     elif no_activity:
@@ -253,9 +350,9 @@ def main(
         if command == "status":
             return cmd_status(seats, out, as_json)
         if command == "digest":
-            return cmd_digest(seats, args, out, err, state or State(), as_json)
+            return cmd_digest(seats, args, out, err, state or State(), as_json, allow_discover=allow_discover)
         if command == "ask":
-            return cmd_ask(seats, args, out, err, book, stdin or sys.stdin, as_json)
+            return cmd_ask(seats, args, out, err, book, stdin or sys.stdin, as_json, allow_discover=allow_discover)
         if command == "hand":
             return show(
                 run_hand(
@@ -273,6 +370,11 @@ def main(
                 as_json,
             )
         if command == "wait":
+            if getattr(args, "bot", None) or getattr(args, "account", None):
+                seats, error = _with_adhoc(seats, args.bot, args.account, allow_discover=allow_discover)
+                if error:
+                    print(error, file=err)
+                    return 2
             return show(
                 run_wait(
                     seats,
@@ -303,17 +405,32 @@ def main(
             if args.brief_command == "init":
                 return show(run_init(path), out, as_json)
             if args.brief_command == "diff":
-                return show(run_diff(seats, path, grok_bot=bot), out, as_json)
+                return show(run_diff(seats, path, grok_bot=bot, grok_seat=getattr(args, "seat", None)), out, as_json)
             if args.brief_command == "push":
                 return show(
-                    run_push(seats, path, yes=args.yes, grok_bot=bot, ledger=book, stdin=stdin or sys.stdin),
+                    run_push(
+                        seats,
+                        path,
+                        yes=args.yes,
+                        grok_bot=bot,
+                        grok_seat=getattr(args, "seat", None),
+                        ledger=book,
+                        stdin=stdin or sys.stdin,
+                    ),
                     out,
                     as_json,
                 )
             print("請用 brief show、brief init、brief diff 或 brief push。", file=err)
             return 2
         if command == "log":
-            return show(run_log(book, seat=args.seat, since=args.since, status=args.status, limit=args.limit), out, as_json)
+            also = ()
+            if args.seat == "grok":
+                focus = default_grok(seats)
+                if focus is not None:
+                    also = (focus.key,)
+            return show(run_log(book, seat=args.seat, since=args.since, status=args.status, limit=args.limit, also=also), out, as_json)
+        if command == "grok":
+            return cmd_grok(args, out, err, as_json)
         if command == "login":
             return cmd_login(seats, args, out, err, as_json)
     except BrokenPipeError:
@@ -328,13 +445,37 @@ def cmd_status(seats, out, as_json: bool) -> int:
     return status_exit(reports)
 
 
-def cmd_digest(seats, args, out, err, state: State, as_json: bool) -> int:
+def _digest_states(reports) -> list[str]:
+    states = []
+    for _seat, result in reports:
+        if result.state == FAILED:
+            states.append(FAILED)
+            continue
+        value = result.value
+        if result.state == "ok" and isinstance(value, ReadOutcome) and value.failures and not value.batches:
+            states.append(FAILED)
+            continue
+        states.append(result.state)
+    return states
+
+
+def cmd_digest(seats, args, out, err, state: State, as_json: bool, *, allow_discover: bool = False) -> int:
     try:
         since = parse_since(args.since) if args.since else None
     except ValueError as exc:
         print(str(exc), file=err)
         return 2
-    limits = {"dot": args.limit, "grok": args.limit} if args.limit else {}
+    if getattr(args, "bot", None) or getattr(args, "account", None):
+        seats, error = _with_adhoc(seats, args.bot, args.account, allow_discover=allow_discover)
+        if error:
+            print(error, file=err)
+            return 2
+    limits = {}
+    if args.limit:
+        limits["dot"] = args.limit
+        for seat in seats:
+            if _is_grok(seat):
+                limits[seat.key] = args.limit
     reports = collect_digest(seats, state.cursors(), since, limits)
     view = build_digest(reports, advance=not (args.peek or since))
     try:
@@ -347,15 +488,14 @@ def cmd_digest(seats, args, out, err, state: State, as_json: bool) -> int:
         return 1
     if view.cursor_updates:
         state.save_cursors(view.cursor_updates)
-    return 1 if view.failed else 0
+    return aggregate_exit(_digest_states(reports))
 
 
-def cmd_ask(seats, args, out, err, ledger: Ledger, stdin, as_json: bool) -> int:
+def cmd_ask(seats, args, out, err, ledger: Ledger, stdin, as_json: bool, *, allow_discover: bool = False) -> int:
     words = list(args.words)
-    bot = args.grok_bot
-    # `ask grok 蝴蝶 "..."` names the bot. One quoted argument is the message,
-    # and the configured grok_bot (or the only bot) is the target.
-    if args.seat == "grok" and not bot and len(words) >= 2:
+    bot = args.bot or args.grok_bot
+    # `ask grok 蝴蝶 "..."` names the bot on the default seat. One quoted argument is the message.
+    if args.seat == "grok" and not args.bot and not args.account and not args.grok_bot and len(words) >= 2:
         bot = words.pop(0)
     text = " ".join(words).strip()
     if not text and not stdin.isatty():
@@ -363,21 +503,61 @@ def cmd_ask(seats, args, out, err, ledger: Ledger, stdin, as_json: bool) -> int:
     if not text:
         print("沒有訊息內容：`trinity-cli ask all \"...\"`，或從 stdin 傳入。", file=err)
         return 2
-    if args.seat == "all":
-        pairs = [(seat, bot if seat.key == "grok" else None) for seat in seats]
+    if args.bot or args.account:
+        seats, error = _with_adhoc(seats, args.bot or bot, args.account, allow_discover=allow_discover)
+        if error:
+            print(error, file=err)
+            return 2
+        target = find_seat(seats, "grok")
+        pairs = [(target, None)] if target else []
+    elif args.seat == "all":
+        pairs = [(seat, bot if _is_grok(seat) and bot and not getattr(seat, "pinned_bot", None) else None) for seat in seats]
     else:
-        pairs = [(seat, bot if seat.key == "grok" else None) for seat in seats if seat.key == args.seat]
-    if not pairs:
+        seat = find_seat(seats, args.seat)
+        pairs = [(seat, bot if seat is not None and _is_grok(seat) else None)] if seat else []
+    if not pairs or pairs[0][0] is None:
         print(f"沒有 {args.seat} 這個座位。", file=err)
         return 2
     nonce = new_nonce()
     ask_id = f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{nonce}"
     rows = run_ask(pairs, text, nonce, ask_id=ask_id, ledger=ledger, timeout=args.timeout, poll=args.poll)
+    shown = rows[0].nonce if len(rows) == 1 else ""
     if as_json:
-        emit(out, dumps(ask_json(rows, ask_id=ask_id, nonce=nonce)))
+        emit(out, dumps(ask_json(rows, ask_id=ask_id, nonce=shown)))
     else:
-        emit(out, render_ask(rows, nonce=nonce, timeout=args.timeout, ledger_path=str(ledger.path)))
+        emit(out, render_ask(rows, nonce=shown, timeout=args.timeout, ledger_path=str(ledger.path)))
     return ask_exit(rows)
+
+
+def cmd_grok(args, out, err, as_json: bool) -> int:
+    if args.grok_command == "bots":
+        rows = discover(Runner())
+        emit(out, dumps(bots_json(rows)) if as_json else render_bots(rows))
+        return 0
+    if args.grok_command == "add":
+        try:
+            backup = add_grok_seat(args.name, args.account, args.bot, default=args.default)
+        except ValueError as exc:
+            print(str(exc), file=err)
+            return 2
+        note = f"已加入 {args.name}。"
+        if backup:
+            note += f" 備份：{backup.name}"
+        emit(out, dumps({"name": args.name, "backup": str(backup) if backup else ""}) if as_json else note)
+        return 0
+    if args.grok_command == "remove":
+        try:
+            backup = remove_grok_seat(args.name)
+        except ValueError as exc:
+            print(str(exc), file=err)
+            return 2
+        note = f"已移除 {args.name}。"
+        if backup:
+            note += f" 備份：{backup.name}"
+        emit(out, dumps({"name": args.name, "backup": str(backup) if backup else ""}) if as_json else note)
+        return 0
+    print("請用 grok bots、grok add 或 grok remove。", file=err)
+    return 2
 
 
 def cmd_login(seats, args, out, err, as_json: bool) -> int:
@@ -387,7 +567,7 @@ def cmd_login(seats, args, out, err, as_json: bool) -> int:
     if (args.api_key or args.web) and args.seat != "muse":
         print("只有 Muse 能用 --api-key 或 --web。", file=err)
         return 2
-    seat = next((item for item in seats if item.key == args.seat), None)
+    seat = find_seat(seats, args.seat)
     if seat is None:
         print(f"沒有 {args.seat} 這個座位。", file=err)
         return 2

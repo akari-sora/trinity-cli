@@ -6,6 +6,7 @@ import difflib
 from pathlib import Path
 
 from trinity_cli.app import call
+from trinity_cli.targets import default_grok
 from trinity_cli.model import FAILED, OK, UNSUPPORTED, InstructionText
 from trinity_cli.shown import Shown
 from trinity_cli.state import Ledger
@@ -56,10 +57,22 @@ def _diff(current: str, wanted: str) -> str:
     return "\n".join(lines[:80]) if lines else "相同"
 
 
+def _is_grok(seat) -> bool:
+    return seat.key == "grok" or str(seat.key).startswith("grok-")
+
+
+def _focus(seats, seat_name: str | None):
+    if seat_name and seat_name != "grok":
+        found = next((seat for seat in seats if seat.key == seat_name), None)
+        if found is not None:
+            return found
+    return default_grok(seats)
+
+
 def _target_for(seat, grok_bot: str | None) -> str | None:
-    if seat.key != "grok":
+    if not _is_grok(seat):
         return None
-    return grok_bot or getattr(seat, "default_bot", None)
+    return grok_bot or getattr(seat, "default_bot", None) or None
 
 
 def run_show(path: Path) -> Shown:
@@ -91,7 +104,7 @@ def run_init(path: Path) -> Shown:
     return Shown(0, f"已建立 {path}", {"path": str(path), "created": True})
 
 
-def run_diff(seats, path: Path, *, grok_bot: str | None = None) -> Shown:
+def run_diff(seats, path: Path, *, grok_bot: str | None = None, grok_seat: str | None = None) -> Shown:
     text, error = _read(path)
     if error == "missing":
         return Shown(
@@ -104,7 +117,10 @@ def run_diff(seats, path: Path, *, grok_bot: str | None = None) -> Shown:
     lines = [str(path), ""]
     rows = []
     failed = False
+    focus = _focus(seats, grok_seat)
     for seat in seats:
+        if _is_grok(seat) and seat is not focus:
+            continue
         if seat.supports("memory"):
             result = call(seat, "memory")
             if result.state == OK and isinstance(result.value, str):
@@ -155,6 +171,7 @@ def run_push(
     *,
     yes: bool = False,
     grok_bot: str | None = None,
+    grok_seat: str | None = None,
     ledger: Ledger | None = None,
     stdin=None,
     now=now_utc,
@@ -171,7 +188,10 @@ def run_push(
     drafts: list[str] = []
     writable: list[tuple] = []
     failures: list[str] = []
+    focus = _focus(seats, grok_seat)
     for seat in seats:
+        if _is_grok(seat) and seat is not focus:
+            continue
         target = _target_for(seat, grok_bot)
         if not seat.supports("instructions"):
             drafts.append(_draft(seat.label, "沒有指令 API。", text))

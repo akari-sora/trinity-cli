@@ -53,7 +53,7 @@ class StatusCommandTests(unittest.TestCase):
         bad = FakeSeat("b", "Beta", status=Result.failed("連不上", "去修它"))
         good = FakeSeat("a", "Alpha", status=Result.ok(SeatStatus("運作中")))
         code, text = run([good, bad, unsupported_muse()], "status")
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)
         line = next(l for l in text.splitlines() if l.startswith("Beta"))
         self.assertIn("✗ 失敗：連不上", line)
         self.assertIn("→ 去修它", line)
@@ -65,7 +65,7 @@ class StatusCommandTests(unittest.TestCase):
 
         good = FakeSeat("a", "Alpha", status=Result.ok(SeatStatus("運作中")))
         code, text = run([FakeSeat("c", "Crash", status=boom), good], "status")
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)
         self.assertIn("Crash  ✗ 失敗：Crash status 內部錯誤", text)
         self.assertIn("Alpha  ✓ 運作中", text)
 
@@ -165,7 +165,7 @@ class GrokStatusTests(unittest.TestCase):
         grok_world = GrokWorld()
         grok_world.overrides["bots"] = fail(1, "gateway error for agent 0b0e7a8c-1111-4222-8333-444455556666")
         code, text = run([dot, grok_seat(grok_world), unsupported_muse()], "status")
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)
         self.assertIn("Grok Bot  ✗ 失敗", text)
         self.assertNotIn("0b0e7a8c", text)
 

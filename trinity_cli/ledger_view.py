@@ -40,7 +40,7 @@ def _line(record: dict) -> str:
     return scrub(line)
 
 
-def run_log(ledger: Ledger, *, seat: str | None = None, since: str | None = None, status: str | None = None, limit: int = 50) -> Shown:
+def run_log(ledger: Ledger, *, seat: str | None = None, since: str | None = None, status: str | None = None, limit: int = 50, also: tuple[str, ...] = ()) -> Shown:
     try:
         cutoff = parse_since(since) if since else None
     except ValueError as exc:
@@ -51,7 +51,7 @@ def run_log(ledger: Ledger, *, seat: str | None = None, since: str | None = None
     for record in ledger.records():
         if not isinstance(record, dict):
             continue
-        if seat and record.get("seat") != seat:
+        if seat and record.get("seat") not in {seat, *also}:
             continue
         if status and not _match_status(record, status):
             continue

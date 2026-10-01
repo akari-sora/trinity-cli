@@ -41,6 +41,13 @@ class DocsDriftTests(unittest.TestCase):
             self.assertTrue((sub.description or "").strip(), name)
             self.assertIn(name, README, name)
             self.assertIn(name, SKILL, name)
+        grok = choices["grok"]
+        grok_nested = next(action for action in grok._actions if action.dest == "grok_command")
+        self.assertEqual(set(grok_nested.choices), {"bots", "add", "remove"})
+        for name, sub in grok_nested.choices.items():
+            self.assertTrue((sub.description or "").strip(), name)
+            self.assertIn(name, README, name)
+            self.assertIn(name, SKILL, name)
 
     def test_help_examples_include_the_common_flows(self):
         text = build_parser().format_help()

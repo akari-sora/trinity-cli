@@ -119,7 +119,7 @@ release:
           "- macOS: local development and live checks.",
           "",
           "## Install",
-          "- macOS and Linux: uv or pipx. chatgpt-dot-cli v0.2.2, muse-web-cli v0.1.2, trinity-cli v0.3.3. gbot fork: npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2. Commands are in the README.",
+          "- macOS and Linux: uv or pipx. chatgpt-dot-cli v0.2.2, muse-web-cli v0.1.2, trinity-cli v0.4.0. gbot fork: npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2. Commands are in the README.",
           "- Windows (PowerShell): irm https://astral.sh/uv/install.ps1 | iex, then the same uv pins. gbot: npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2.",
           "",
           "## Related projects",

@@ -179,7 +179,8 @@ class AskFlowTests(AskTestCase):
         self.assertIn(" │ ", text)
         self.assertEqual(len(dot_world.sent), 1)
         self.assertEqual(len(grok_world.sent), 1)
-        self.assertEqual(dot_world.sent[0], grok_world.sent[0])
+        self.assertEqual(dot_world.sent[0].split("\n\n", 1)[0], grok_world.sent[0].split("\n\n", 1)[0])
+        self.assertNotEqual(dot_world.sent[0], grok_world.sent[0])
 
     def test_nonce_is_a_separate_last_line(self):
         world = GrokWorld()

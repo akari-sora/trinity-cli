@@ -1,6 +1,6 @@
 [project]
 name = "trinity-cli"
-version = "0.3.3"
+version = "0.4.0"
 description = "One command in front of your always-on personal agents: ChatGPT Your dot, Grok Bot, and Muse."
 readme = "README.md"
 requires-python = ">=3.11"

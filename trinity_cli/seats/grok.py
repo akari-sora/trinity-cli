@@ -50,6 +50,8 @@ FIX_AMBIGUOUS = (
     "trinity 會在 gbot thread 的說明裡看到 --account 時帶上它，也會設 GBOT_ACCOUNT。"
     "打開 Grok Bot app 確認登入，用 `gbot accounts` 看標籤，再跑 `gbot doctor`"
 )
+SANDBOX_GONE = "unreachable: sandbox gone — re-login this account in the Grok Bot app"
+FIX_RELOGIN = "在 Grok Bot app 重新登入這個帳號。gbot 沒有重新登入的指令。"
 _SCHEDULE_COMMANDS = ("schedules", "routines", "automations")
 # gbot fails with these before any gateway request, so nothing was sent.
 BEFORE_SEND = (
@@ -191,12 +193,20 @@ class GrokSeat(Seat):
         sleep=time.sleep,
         now=now_utc,
         account: str | None = None,
+        *,
+        seat_name: str = "grok",
+        pinned_bot: str | None = None,
+        is_default: bool = False,
     ):
         self.runner = runner or Runner()
         self.binary = binary if binary is not None else find_tool("gbot", "TRINITY_GBOT", GBOT_FALLBACKS)
-        self.default_bot = default_bot or configured_grok_bot()
+        self.key = seat_name or "grok"
+        self.label = "Grok Bot" if self.key == "grok" else self.key
+        self.is_default = is_default
+        self.pinned_bot = pinned_bot
+        self.default_bot = pinned_bot or default_bot or (None if pinned_bot == "" else configured_grok_bot())
         wanted = only_bots if only_bots is not None else os.environ.get("TRINITY_GROK_BOTS", "").split(",")
-        self.only_bots = [name.strip() for name in wanted if name.strip()]
+        self.only_bots = [pinned_bot] if pinned_bot else [name.strip() for name in wanted if name.strip()]
         self.account = configured_gbot_account() if account is None else clean_account(account)
         self.clock = clock
         self.sleep = sleep
@@ -295,6 +305,8 @@ class GrokSeat(Seat):
         try:
             rows = self._json("bots", "list")
         except Problem as problem:
+            if problem.error == SANDBOX_GONE:
+                raise problem
             raise self._doctor_problem() or problem
         if not isinstance(rows, list):
             raise Problem("gbot bots list 的格式看不懂", "更新 gbot 後重試")
@@ -367,7 +379,7 @@ class GrokSeat(Seat):
 
         def one(bot: dict):
             name = str(bot.get("name"))
-            key = f"grok.{bot['id']}"
+            key = f"{self.key}.messages" if self.pinned_bot else f"{self.key}.{bot['id']}"
             label = f"Grok Bot/{name}"
             cursor = cursors.get(key)
             if not (isinstance(cursor, dict) and cursor.get("id")) and isinstance(cursors.get("*"), dict):
@@ -529,8 +541,8 @@ class GrokSeat(Seat):
                 delivery = "accepted"
             return Result.ok(SendReceipt(f"Grok Bot/{name or target}", str(ref or target), nonce, sent_at, delivery))
         err = short_error(proc.err)
-        if proc.code == 127 or (not proc.timed_out and any(mark in err.lower() for mark in BEFORE_SEND)):
-            problem = problem_from(proc)
+        problem = problem_from(proc)
+        if proc.code == 127 or problem.error == SANDBOX_GONE or (not proc.timed_out and any(mark in err.lower() for mark in BEFORE_SEND)):
             return Result.failed(f"{problem.error}，沒有送出", problem.hint)
         error = "送出逾時" if proc.timed_out else err or f"exit {proc.code}"
         return Result.ok(SendReceipt(f"Grok Bot/{target}", target, nonce, sent_at, "unknown", error=error))
@@ -576,6 +588,8 @@ def problem_from(proc) -> Problem:
         return Problem("Grok Bot app 存了多個 gateway 登入，gbot 選不出要用哪一個", FIX_AMBIGUOUS)
     if any(mark in low for mark in ("gateway descriptor", "safe storage", "cursor_access_token", "ensuresandbox")):
         return Problem("讀不到 Grok Bot app 的登入", FIX_APP)
+    if "404" in low or ("sandbox" in low and "not found" in low):
+        return Problem(SANDBOX_GONE, FIX_RELOGIN)
     if any(mark in low for mark in ("401", "403", "unauthorized", "forbidden")):
         return Problem("Grok Bot 登入失效", "打開 Grok Bot app 重新登入，再跑 `gbot doctor`")
     if "no bot or group" in low or "ambiguous name" in low:
