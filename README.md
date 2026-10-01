@@ -85,8 +85,8 @@ npm uninstall -g grok-bot-cli
 ### 第一次設定
 
 1. Your dot：`codex login`。401 時再跑一次。也可以 `trinity-cli login dot`。多個 dot 時設 `TRINITY_DOT_ID`。細節見 [chatgpt-dot-cli 疑難排解](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#疑難排解)。
-2. Grok Bot：打開 Grok Bot app 登入。`trinity-cli login grok` 只會重複這句，不會讀那個登入。有多個登入時先跑 `gbot accounts`，把要的標籤寫進設定。細節見 [grok-bot-cli 疑難排解](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#疑難排解)。
-3. Muse 網頁：`muse-web-cli login`（看得到的視窗），完成後 `muse-web-cli start --headless`。或 `trinity-cli login muse --web`。api 憑證：`trinity-cli login muse` 會執行 `muse-web-cli credential`，沒登入就先走登入，再寫入 `~/.trinity-cli/muse-credential`（mode 600），不印 token。`--api-key` 仍把金鑰從標準輸入交給 `muse auth set --api-key-stdin`。細節見 [muse-web-cli 疑難排解](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#疑難排解)。
+2. Grok Bot：打開 Grok Bot app 登入。`trinity-cli login grok` 只會重複這句，不會讀那個登入。有多個登入時先跑 `gbot accounts`，把要的標籤寫進設定。細節見 [grok-bot-cli Install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#install)。
+3. Muse 網頁：`muse-web-cli login`（看得到的視窗），完成後 `muse-web-cli start --headless`。或 `trinity-cli login muse --web`。api 憑證：`trinity-cli login muse` 會執行 `muse-web-cli credential`，沒登入就先走登入，再寫入 `~/.trinity-cli/muse-credential`（mode 600），不印 token。`--api-key` 仍把金鑰從標準輸入交給 `muse auth set --api-key-stdin`。細節見 [muse-web-cli 排解](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#排解)。
 4. 多個 Grok 座位用登入標籤加 bot 名稱。`grok` 指向 `grok_default`。假值：
 
 ```json
@@ -311,11 +311,11 @@ Muse 在讀和送之前先看 `chats`。目前是副聊天室時不送出，也�
 | Your dot 401 或登入檔不能用 | `codex login`。見 [chatgpt-dot-cli 疑難排解](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#疑難排解) |
 | Your dot 網路或非 200 | 先看 `chatgpt-dot-cli list` |
 | 找不到 chatgpt-dot-cli | 安裝，或設 `TRINITY_DOT_CLI` |
-| Grok 多個登入 | `gbot accounts`，再寫 `gbot_account`。見 [grok-bot-cli 疑難排解](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#疑難排解) |
+| Grok 多個登入 | `gbot accounts`，再寫 `gbot_account`。見 [grok-bot-cli Install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#install) |
 | Grok 登入不能用 | 打開 Grok Bot app，跑 `gbot doctor` |
 | 找不到 gbot | 安裝，或設 `TRINITY_GBOT` |
 | Muse 瀏覽器沒起來 | `muse-web-cli start --headless` |
-| Muse 網頁登入失效 | `muse-web-cli login`。見 [muse-web-cli 疑難排解](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#疑難排解) |
+| Muse 網頁登入失效 | `muse-web-cli login`。見 [muse-web-cli 排解](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#排解) |
 | Muse api 缺憑證 | `trinity-cli login muse` |
 | Muse 憑證檔權限 | macOS／Linux：`chmod 600 ~/.trinity-cli/muse-credential`。Windows：`icacls` 只給目前使用者讀 |
 | Muse 在副聊天室 | 在 Muse 視窗切回主聊天室 |
@@ -442,7 +442,7 @@ npm uninstall -g grok-bot-cli
 ### First-time setup
 
 1. Your dot: `codex login`. Run it again on a 401. `trinity-cli login dot` does the same. Set `TRINITY_DOT_ID` when the account has more than one dot. See the [chatgpt-dot-cli troubleshooting](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#troubleshooting) section.
-2. Grok Bot: sign in with the Grok Bot app. `trinity-cli login grok` only repeats that; it does not read the session. When several logins exist, run `gbot accounts` and save the label. See the [grok-bot-cli troubleshooting](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#troubleshooting) section.
+2. Grok Bot: sign in with the Grok Bot app. `trinity-cli login grok` only repeats that; it does not read the session. When several logins exist, run `gbot accounts` and save the label. See the [grok-bot-cli Install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#install) section.
 3. Muse in the browser: `muse-web-cli login` in a visible window, then `muse-web-cli start --headless`. Or `trinity-cli login muse --web`. The api credential is `trinity-cli login muse`, which runs `muse-web-cli credential`: it logs in when needed and writes `~/.trinity-cli/muse-credential` (mode 600) without printing the token. `--api-key` still passes a key from stdin to `muse auth set --api-key-stdin`. See the [muse-web-cli troubleshooting](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#troubleshooting) section.
 4. Several Grok seats are keyed by login label plus bot name. `grok` means `grok_default`. Fake values:
 
@@ -668,7 +668,7 @@ Before a Muse read or send, trinity calls `chats`. A side chat is not sent into 
 | Your dot 401 or unusable login | `codex login`. See [chatgpt-dot-cli troubleshooting](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#troubleshooting) |
 | Your dot network or non-200 | Try `chatgpt-dot-cli list` |
 | chatgpt-dot-cli missing | Install it, or set `TRINITY_DOT_CLI` |
-| Several Grok logins | `gbot accounts`, then set `gbot_account`. See [grok-bot-cli troubleshooting](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#troubleshooting) |
+| Several Grok logins | `gbot accounts`, then set `gbot_account`. See [grok-bot-cli Install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/README.md#install) |
 | Grok login unusable | Open the Grok Bot app and run `gbot doctor` |
 | gbot missing | Install it, or set `TRINITY_GBOT` |
 | Muse browser down | `muse-web-cli start --headless` |
