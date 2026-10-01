@@ -6,8 +6,14 @@ workflow:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
 
+# Defaults are GitLab.com runners. Override LINUX_RUNNER_TAG and
+# WINDOWS_RUNNER_TAG in project CI/CD settings to use your own.
+variables:
+  LINUX_RUNNER_TAG: saas-linux-small-amd64
+  WINDOWS_RUNNER_TAG: saas-windows-medium-amd64
+
 default:
-  tags: [grok-box, ondemand, trinity-cli]
+  tags: [$LINUX_RUNNER_TAG]
   interruptible: true
   retry:
     max: 1
@@ -19,7 +25,7 @@ stages:
 
 test:
   stage: test
-  tags: [grok-box, ondemand, trinity-cli]
+  tags: [$LINUX_RUNNER_TAG]
   image: python:3.12-slim
   variables:
     PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -35,7 +41,7 @@ test:
 # examples such as `hand … --to … "…"` depend on the parser workaround.
 test:py311:
   stage: test
-  tags: [grok-box, ondemand, trinity-cli]
+  tags: [$LINUX_RUNNER_TAG]
   image: python:3.11-slim
   variables:
     PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -51,7 +57,7 @@ test:py311:
 # --backend api. No Chrome, no Muse, no secrets. Fails when the pinned tag is missing.
 contract:muse:
   stage: test
-  tags: [grok-box, ondemand, trinity-cli]
+  tags: [$LINUX_RUNNER_TAG]
   image: python:3.12-slim
   variables:
     PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -78,7 +84,7 @@ contract:muse:
 
 release-check:
   stage: test
-  tags: [grok-box, ondemand, trinity-cli]
+  tags: [$LINUX_RUNNER_TAG]
   image: python:3.12-slim
   rules:
     - if: $CI_COMMIT_TAG
@@ -99,7 +105,7 @@ release-check:
       print(f"{tag} matches pyproject.toml and CHANGELOG.md")
       PY
 
-# Windows jobs must not inherit the grok-box tags. Tags, manual web runs, and
+# Windows jobs must not inherit the Linux runner tag. Tags, manual web runs, and
 # main pushes that change shipped code, tests, or packaging. A CI-only push
 # still runs Linux only. Merge requests are manual: the self-hosted runner
 # accepts protected refs only, so an unprotected source branch must not block.
@@ -130,7 +136,7 @@ test:windows:
   stage: test
   inherit:
     default: [retry]
-  tags: [windows, hx370]
+  tags: [$WINDOWS_RUNNER_TAG]
   needs:
     - job: test
     - job: test:py311
@@ -177,7 +183,7 @@ windows:hosted:
 
 release:
   stage: release
-  tags: [grok-box, ondemand, trinity-cli]
+  tags: [$LINUX_RUNNER_TAG]
   image: python:3.12-slim
   interruptible: false
   rules:
@@ -228,7 +234,7 @@ release:
       text += "\n" + "\n".join([
           "",
           "## Platforms",
-          "- Linux: CI on the grok-box runner.",
+          "- Linux: CI on the project's Linux runner (GitLab.com hosted by default).",
           "- Windows: CI on a self-hosted Windows runner.",
           "- macOS: local development and live checks.",
           "",

@@ -16,7 +16,7 @@
 
 它不讀 `~/.codex/auth.json`、Grok Bot app 的登入，或 Muse 的 cookie。`login` 只轉給那些工具既有的公開指令，不印憑證。唯一會存下 token 的是 `login muse`：它叫 `muse-web-cli credential` 把 Muse gateway token 只寫進 `~/.trinity-cli/muse-credential`（mode 600），給 `--muse-backend api` 用。trinity 自己不讀、不印這個檔。
 
-支援的系統：Linux（CI）、Windows（CI）、macOS（本機與實機檢查）。
+支援的系統：Linux（CI）、Windows（CI）、macOS（本機與實機檢查）。CI 預設使用 GitLab.com 的 runner。維護者可設定 CI/CD 變數 `LINUX_RUNNER_TAG` 與 `WINDOWS_RUNNER_TAG`，把 job 指到自己的 runner。
 
 ### 三個座位
 
@@ -382,7 +382,7 @@ skill 在 `skills/trinity-cli/SKILL.md`。目錄已經存在時再連過去，�
 
 It does not read `~/.codex/auth.json`, the Grok Bot app session, or Muse cookies. `login` only hands off to those public CLIs and does not print a credential. The one login that stores a token is `login muse`: it has `muse-web-cli credential` write the Muse gateway token only to `~/.trinity-cli/muse-credential` (mode 600) for `--muse-backend api`. trinity itself never reads or prints that file.
 
-Supported systems: Linux (CI), Windows (CI), and macOS (local use and live checks).
+Supported systems: Linux (CI), Windows (CI), and macOS (local use and live checks). CI uses GitLab.com runners by default. Maintainers can point jobs at their own runners by setting the CI/CD variables `LINUX_RUNNER_TAG` and `WINDOWS_RUNNER_TAG`.
 
 ### The three seats
 
