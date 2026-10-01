@@ -35,11 +35,11 @@
 
 ### 安裝
 
-v0.4.4 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下：應印出 `muse-web-cli 0.1.4`、`trinity-cli 0.4.4`、`gbot 0.11.2`。舊的 muse-web-cli v0.1.2 沒有 `credential` 和 api gateway；v0.1.3 的 `send --wait` 在長聊天室會等不到回覆。
+v0.4.5 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下：應印出 `muse-web-cli 0.1.4`、`trinity-cli 0.4.5`、`gbot 0.11.2`。舊的 muse-web-cli v0.1.2 沒有 `credential` 和 api gateway；v0.1.3 的 `send --wait` 在長聊天室會等不到回覆。
 
 macOS 與 Linux 需要 Python 3.11+、git、以及已在 PATH 上的 `uv`。Grok 還要 Node.js 22.19.0+ 和 npm。uv 的執行檔在 `~/.local/bin`；`--version` 找不到時把那個目錄加進 PATH。第一次 `uv tool install` 可能會下載 Python。
 
-不要用 `npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...`。那一行會結束碼 0，但 `gbot` 是斷掉的連結。改裝這個 tag 附的套件檔：
+不要用 `npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...`。那一行會結束碼 0，但 `gbot` 是斷掉的連結。下面的 `grok-bot-cli-0.11.2.tgz` 是 grok-bot-cli tag `v0.11.2-iml1s.2` 附的套件檔，trinity-cli 的版本釘選是另一個。改裝那個 tag 附的套件檔：
 
 ```bash
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
@@ -47,7 +47,7 @@ curl -fsSL -o grok-bot-cli-0.11.2.tgz "https://gitlab.com/-/project/86401528/upl
 npm install -g ./grok-bot-cli-0.11.2.tgz
 rm -f grok-bot-cli-0.11.2.tgz
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.4"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.5"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -66,7 +66,7 @@ npm install -g .\grok-bot-cli-0.11.2.tgz
 Remove-Item grok-bot-cli-0.11.2.tgz
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.4"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.5"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -401,11 +401,11 @@ Supported systems: Linux (CI), Windows (CI), and macOS (local use and live check
 
 ### Install
 
-v0.4.4 pins these versions. After installing trinity and each seat tool, check every `--version`: expect `muse-web-cli 0.1.4`, `trinity-cli 0.4.4`, and `gbot 0.11.2`. The older muse-web-cli v0.1.2 has no `credential` and no api gateway; v0.1.3's `send --wait` can miss the reply in a long chat.
+v0.4.5 pins these versions. After installing trinity and each seat tool, check every `--version`: expect `muse-web-cli 0.1.4`, `trinity-cli 0.4.5`, and `gbot 0.11.2`. The older muse-web-cli v0.1.2 has no `credential` and no api gateway; v0.1.3's `send --wait` can miss the reply in a long chat.
 
 macOS and Linux need Python 3.11+, git, and `uv` on `PATH`. Grok also needs Node.js 22.19.0+ and npm. uv installs commands under `~/.local/bin`; add that directory to `PATH` when `--version` cannot find them. The first `uv tool install` may download a Python.
 
-Do not run `npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...`. That command exits 0 and leaves a dangling `gbot`. Install the package file attached to the tag:
+Do not run `npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...`. That command exits 0 and leaves a dangling `gbot`. The `grok-bot-cli-0.11.2.tgz` below is the package file from grok-bot-cli tag `v0.11.2-iml1s.2`. The trinity-cli version pin is separate. Install the package file attached to that tag:
 
 ```bash
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
@@ -413,7 +413,7 @@ curl -fsSL -o grok-bot-cli-0.11.2.tgz "https://gitlab.com/-/project/86401528/upl
 npm install -g ./grok-bot-cli-0.11.2.tgz
 rm -f grok-bot-cli-0.11.2.tgz
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.4"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.5"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -432,7 +432,7 @@ npm install -g .\grok-bot-cli-0.11.2.tgz
 Remove-Item grok-bot-cli-0.11.2.tgz
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.4"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.5"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version

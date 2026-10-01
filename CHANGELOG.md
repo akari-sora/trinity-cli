@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.5 - 2026-10-02
+
+- 安裝說明寫明 `grok-bot-cli-0.11.2.tgz` 來自 grok-bot-cli tag `v0.11.2-iml1s.2`。trinity-cli 的版本釘選是另一個。
+
 ## 0.4.4 - 2026-10-02
 
 - Python 3.11 也能跑 README 裡選項夾在位置參數中間的指令，例如 `hand dot#last --to grok "…"` 和 `ask grok --bot NAME --account LABEL "…"`。3.12 以上本來就可以。CI 加了 Python 3.11 的測試。
