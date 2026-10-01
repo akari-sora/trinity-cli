@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2
+
+- `login muse` 只在 `session_expired`，或尚未登入且狀態是 ok／空白時，才提示去登入。地區限制、瀏覽器打不開、設定檔忙碌保留原本的 hint。
+- 印出的錯誤與 hint 會先清掉 token、cookie 這類欄位值。
+- 座位工具釘選：muse-web-cli v0.1.3。chatgpt-dot-cli 仍是 v0.2.2，gbot fork 仍是 v0.11.2-iml1s.2。
+
 ## 0.4.1
 
 - Muse 的 backend 由 trinity 明確選擇。`--muse-backend` 優先於 `muse_backend`，再來是 `MUSE_WEB_BACKEND`，都沒有就不傳 `--backend`。值可以是 `browser`、`api` 或 `auto`。

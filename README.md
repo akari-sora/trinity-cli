@@ -35,7 +35,7 @@
 
 ### 安裝
 
-v0.4.1 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下。
+v0.4.2 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下。
 
 macOS 與 Linux（需要 Python 3.11+；Grok 還要 Node 18+）：
 
@@ -43,7 +43,7 @@ macOS 與 Linux（需要 Python 3.11+；Grok 還要 Node 18+）：
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
 npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.1"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -60,7 +60,7 @@ uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
 npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.1"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -392,7 +392,7 @@ Supported systems: Linux (CI), Windows (CI), and macOS (local use and live check
 
 ### Install
 
-v0.4.1 pins these versions. After installing trinity and each seat tool, check every `--version`.
+v0.4.2 pins these versions. After installing trinity and each seat tool, check every `--version`.
 
 macOS and Linux (Python 3.11+; Grok also needs Node 18+):
 
@@ -400,7 +400,7 @@ macOS and Linux (Python 3.11+; Grok also needs Node 18+):
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
 npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.1"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -417,7 +417,7 @@ uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.2"
 npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.2
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.1"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.2"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
