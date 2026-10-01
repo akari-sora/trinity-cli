@@ -12,7 +12,13 @@ from trinity_cli.seats.muse import MuseSeat
 __all__ = ["DotSeat", "GrokSeat", "MuseSeat", "Problem", "Seat", "build_seats"]
 
 
-def build_seats(runner: Runner | None = None, *, grok_bot: str | None = None, include_activity: bool = True) -> list[Seat]:
+def build_seats(
+    runner: Runner | None = None,
+    *,
+    grok_bot: str | None = None,
+    include_activity: bool = True,
+    muse_backend: str | None = None,
+) -> list[Seat]:
     runner = runner or Runner()
     specs, default_name = load_grok_seats()
     grok: list[Seat] = []
@@ -39,5 +45,5 @@ def build_seats(runner: Runner | None = None, *, grok_bot: str | None = None, in
     return [
         DotSeat(runner, include_activity=include_activity),
         *grok,
-        MuseSeat(runner),
+        MuseSeat(runner, backend=muse_backend, include_activity=include_activity),
     ]

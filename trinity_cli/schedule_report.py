@@ -22,15 +22,23 @@ def run_schedules(seats) -> Shown:
     for seat, result in reports:
         if result.state == OK:
             items = _items(result.value)
+            served = getattr(seat, "served_backend", "") or ""
+            shown = seat.label
+            if served:
+                shown = f"{seat.label} · {served}"
+                if getattr(seat, "fell_back", False):
+                    shown += "（api 不支援，已改走 browser）"
             seats_json.append(
                 {
                     "seat": seat.key,
                     "label": seat.label,
                     "state": result.state,
+                    "backend": served,
+                    "fallback": bool(getattr(seat, "fell_back", False)),
                     "items": [{"title": item.title, "when": item.when, "status": item.status} for item in items],
                 }
             )
-            lines.append(seat.label)
+            lines.append(shown)
             if items:
                 for item in items:
                     when = f" · {item.when}" if item.when else ""

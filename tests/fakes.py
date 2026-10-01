@@ -388,6 +388,9 @@ class MuseWorld:
         self.pending_items: list[dict] = []
         self.messages: list[dict] = []
         self.groups: list[dict] = []
+        self.activity_groups: list[dict] = []
+        self.api_unsupported: set[str] = set()
+        self.used_backends: list[str | None] = []
         self.memory_text = ""
         self.reply = ""
         self.timeout_send = False
@@ -395,14 +398,27 @@ class MuseWorld:
         self.calls: list[list[str]] = []
 
     def _state(self, command: str) -> str:
-        if self.unsupported:
+        if self.unsupported or (self.used_backends and self.used_backends[-1] == "api" and command in self.api_unsupported):
             return "unsupported"
         return self.force.get(command, "ok")
 
     def __call__(self, args, stdin):
         items = [item for item in args if item != "--autostart"]
-        command = items[0]
-        rest = items[1:]
+        backend = None
+        parsed: list[str] = []
+        index = 0
+        while index < len(items):
+            if items[index] == "--backend" and index + 1 < len(items):
+                backend = items[index + 1]
+                index += 2
+                continue
+            parsed.append(items[index])
+            index += 1
+        self.used_backends.append(backend)
+        if backend:
+            self.backend = backend
+        command = parsed[0]
+        rest = parsed[1:]
         if rest[:1] == ["--"]:
             rest = rest[1:]
         self.calls.append([command, *rest])
@@ -469,6 +485,20 @@ class MuseWorld:
             return _muse_proc(
                 state,
                 {"backend": self.backend, "state": state, "count": len(items), "items": items, "error": error, "hint": hint},
+            )
+        if command == "activity":
+            groups = self.activity_groups if state == "ok" else []
+            count = sum(len(group.get("items") or []) for group in groups)
+            return _muse_proc(
+                state,
+                {
+                    "backend": self.backend if backend is None else backend,
+                    "state": state,
+                    "count": count,
+                    "groups": groups,
+                    "error": error,
+                    "hint": hint,
+                },
             )
         if command == "upcoming":
             groups = self.groups if state == "ok" else []

@@ -49,6 +49,7 @@ class Message:
     at: datetime | None
     from_agent: bool = False
     key: str = ""
+    presentation: bool = False
 
 
 @dataclass

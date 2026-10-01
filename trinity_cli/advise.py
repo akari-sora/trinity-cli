@@ -75,6 +75,12 @@ def _notes_for(key: str, task: str, result) -> tuple[int, list[str]]:
         notes.append("這台 Mac 沒連接")
     if result.state != OK and result.state != FAILED:
         notes.append(result.error or "狀態不明")
+    backend = details.get("backend") if isinstance(details, dict) else None
+    if isinstance(backend, str) and backend:
+        if details.get("fallback"):
+            notes.append(f"backend {backend}（api 不支援，已改走 browser）")
+        else:
+            notes.append(f"backend {backend}")
     return score, notes
 
 

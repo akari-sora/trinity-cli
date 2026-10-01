@@ -202,6 +202,39 @@ def add_grok_seat(name: str, account: str, bot: str, *, default: bool = False, p
     return backup
 
 
+_MUSE_BACKENDS = {"browser", "api", "auto"}
+
+
+def clean_muse_backend(value: object) -> str | None:
+    """`browser`, `api`, or `auto`. Anything else is ignored."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip().lower()
+    if text not in _MUSE_BACKENDS:
+        return None
+    return text
+
+
+def resolve_muse_backend(cli: str | None = None, *, data: dict | None = None, env: dict | None = None) -> str | None:
+    """CLI flag, then config `muse_backend`, then `MUSE_WEB_BACKEND`.
+
+    None means trinity does not pass `--backend`, and muse-web-cli uses its own default.
+    """
+    env = os.environ if env is None else env
+    if data is None:
+        data = _config()
+    sources = (
+        cli,
+        data.get("muse_backend") if isinstance(data, dict) else None,
+        env.get("MUSE_WEB_BACKEND"),
+    )
+    for raw in sources:
+        chosen = clean_muse_backend(raw)
+        if chosen:
+            return chosen
+    return None
+
+
 def remove_grok_seat(name: str, *, path=None):
     path = path or (home() / "config.json")
     seat_name = clean_seat_name(name)
