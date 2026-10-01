@@ -386,6 +386,7 @@ class MuseWorld:
         self.memory_text = ""
         self.reply = ""
         self.timeout_send = False
+        self.chat = "main"
         self.calls: list[list[str]] = []
 
     def _state(self, command: str) -> str:
@@ -476,6 +477,64 @@ class MuseWorld:
                     "groups": groups,
                     "error": error,
                     "hint": hint,
+                },
+            )
+        if command == "chats":
+            mode = "unsupported" if self.unsupported or self.chat == "unsupported" else self.chat
+            forced = self.force.get("chats")
+            if forced:
+                mode = forced
+            if mode == "unsupported":
+                return _muse_proc(
+                    "unsupported",
+                    {
+                        "backend": self.backend,
+                        "state": "unsupported",
+                        "count": 0,
+                        "chats": [],
+                        "error": "不支援",
+                        "hint": None,
+                    },
+                )
+            if mode == "missing":
+                return _muse_proc(
+                    "ui_changed",
+                    {
+                        "backend": self.backend,
+                        "state": "ui_changed",
+                        "count": 0,
+                        "chats": [],
+                        "error": "切換面板不在",
+                        "hint": None,
+                        "missing": ["side_chats"],
+                    },
+                )
+            if mode not in {"main", "side", "ok"}:
+                return _muse_proc(
+                    mode,
+                    {
+                        "backend": self.backend,
+                        "state": mode,
+                        "count": 0,
+                        "chats": [],
+                        "error": _MUSE_ERROR.get(mode, "不支援"),
+                        "hint": "wrong hint" if mode in {"session_expired", "browser_down"} else None,
+                        "missing": [],
+                    },
+                )
+            kind = "side" if mode == "side" else "main"
+            return _muse_proc(
+                "ok",
+                {
+                    "backend": self.backend,
+                    "state": "ok",
+                    "count": 2,
+                    "chats": [
+                        {"title": "SECRET_CHAT_TITLE", "is_current": kind == "main", "kind": "main"},
+                        {"title": "SECRET_SIDE_TITLE", "is_current": kind == "side", "kind": "side"},
+                    ],
+                    "error": None,
+                    "hint": None,
                 },
             )
         if command == "memory":

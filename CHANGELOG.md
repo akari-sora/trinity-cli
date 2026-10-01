@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+
+- Muse 讀取（digest、ask 回讀、wait）和送出之前會先看 `muse-web-cli chats`。目前開著副聊天室時不送出，狀態寫「目前在副聊天室」，並提示在 Muse 視窗切回主聊天室；這種讀取不算主對話，也不推進讀取位置。`chats` 不支援或切換面板不在時，仍使用目前開啟的對話，並在 status 註明。聊天室標題不會印出來。
+- `muse-web-cli` 釘在 v0.1.1。
+
 ## 0.3.1
 
 - Grok 的文字回覆是 `send-message`（`message.type` 為 `text`），不是 `role: assistant`。0.3.0 因此把已經送到的回覆看成沒有回覆。現在這種條目算 bot 說的；核准卡片仍不算。時間欄位 `timestampMs` 也會讀。

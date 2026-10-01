@@ -22,27 +22,27 @@ trinity 不自己連服務，也不碰登入：Your dot 走 `chatgpt-dot-cli --j
 
 1. `chatgpt-dot-cli` v0.2.1：`uv tool install git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.1`。`messages --json` 固定是 `{"name","lines","messages"}`（舊到新）。`--limit` 只能 1 到 32，否則結束碼 2、不會送請求。dot id 用 `--dot-id`，不能當位置參數。非 200 會先在 stderr 印一行再以結束碼 3 離開。
 2. `gbot`（使用者的 fork v0.11.2-iml1s.1）：`npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.1`。或 clone 後在裡面 `npm link`。需要 Node 18+ 和已登入的 Grok Bot app。
-3. `muse-web-cli` v0.1.0（瀏覽器，headless 或有視窗；`api` backend 仍是接縫）：
+3. `muse-web-cli` v0.1.1（瀏覽器，headless 或有視窗；`api` backend 仍是接縫）：
 
    ```bash
-   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
    muse-web-cli login
    muse-web-cli start --headless
    ```
 
-4. trinity 本身（需要 Python 3.11+）。從 git 安裝並釘在 v0.3.1：
+4. trinity 本身（需要 Python 3.11+）。從 git 安裝並釘在 v0.3.2：
 
    ```bash
-   uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.1"
-   pipx install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.1"
+   uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
+   pipx install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
    trinity-cli --version
    ```
 
 升級到同一個版本釘選：
 
 ```bash
-uv tool install --force "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.1"
-pipx install --force "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.1"
+uv tool install --force "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
+pipx install --force "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
 ```
 
 移除：
@@ -97,7 +97,7 @@ trinity-cli log --seat dot --since 2h
 
 `brief` 讀寫本機的 `~/.trinity-cli/brief.md`。`show` 印出檔案。`diff` 跟讀得到的指令比對；Muse 會額外只讀 `memory`，拿來跟 brief 比較，不會寫回去。`push` 只在 gbot 有 `bots update --instructions` 時寫進 Grok bot，而且先問過（`--yes` 可略過）。Your dot 和 Muse 沒有指令 API，只會印出可以自己貼上的草稿，不會傳訊息。
 
-Muse 的 `send` 不帶 `--wait`。trinity 先記 ledger，送出一次，再用 `messages` 輪詢 nonce 後面的第一則回覆。逾時只停輪詢，**不會再呼叫 send**。登入失效時的修法是 `muse-web-cli login`；瀏覽器沒起來時是 `muse-web-cli start --headless`。`status` 看到待處理項目時會標「等你處理」。
+Muse 的 `send` 不帶 `--wait`。trinity 先記 ledger，送出一次，再用 `messages` 輪詢 nonce 後面的第一則回覆。逾時只停輪詢，**不會再呼叫 send**。讀和送之前會先看 `chats`。目前是副聊天室時不送出，status 寫「目前在副聊天室」，並請你在 Muse 視窗切回主聊天室；這種讀取不推進讀取位置。`chats` 不支援或切換面板不在時，仍使用目前開啟的對話，status 會註明。聊天室標題不會印出來。`status` 也會標出目前是主聊天室還是副聊天室。登入失效時的修法是 `muse-web-cli login`；瀏覽器沒起來時是 `muse-web-cli start --headless`。`status` 看到待處理項目時會標「等你處理」。
 
 ### nonce 的設計
 
@@ -150,27 +150,27 @@ Pinned dependencies:
 
 1. `chatgpt-dot-cli` v0.2.1: `uv tool install git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.1`. `messages --json` is always `{"name","lines","messages"}` (oldest first). `--limit` must be 1..32, or the command exits 2 and sends no request. Pass a dot id with `--dot-id`, not as a positional. A non-200 prints one stderr line and exits 3.
 2. `gbot`, the fork v0.11.2-iml1s.1: `npm install -g github:ImL1s/grok-bot-cli#v0.11.2-iml1s.1`, or clone the repo and `npm link`. Needs Node 18+ and a signed-in Grok Bot app.
-3. `muse-web-cli` v0.1.0 (headless or headed browser; the `api` backend is still a seam):
+3. `muse-web-cli` v0.1.1 (headless or headed browser; the `api` backend is still a seam):
 
    ```bash
-   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
    muse-web-cli login
    muse-web-cli start --headless
    ```
 
-4. trinity itself (Python 3.11+), pinned to v0.3.1:
+4. trinity itself (Python 3.11+), pinned to v0.3.2:
 
    ```bash
-   uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.1"
-   pipx install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.1"
+   uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
+   pipx install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
    trinity-cli --version
    ```
 
 Upgrade to the same pin:
 
 ```bash
-uv tool install --force "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.1"
-pipx install --force "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.1"
+uv tool install --force "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
+pipx install --force "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.3.2"
 ```
 
 Uninstall:
@@ -198,7 +198,7 @@ For development in this checkout, `uv tool install --editable .` works. If `chat
 
 Cursors live in `~/.trinity-cli/state.json` (no secrets) and move only after digest output was printed. `--peek`, `--since`, `hand`, and `wait` never move them. When a cursor falls out of the window (Grok `gapReset`, more new dot messages than one read returns, or Muse's previously seen tail is gone from the window), the timeline says 可能漏看 ("possibly missed"). The dot messages API returns at most 32 per read, and chatgpt-dot-cli v0.2.1 exits 2 without a request above that, so trinity reads 30. When `gbot thread --help` includes `--after`, trinity uses it and reads `cursor`, `entryCount`, and `gapReset`. Muse messages have no timestamps, only date separators, so their times stay unknown. The Muse cursor is a content hash plus how many times that text occurred in the window. Extra JSON fields are ignored.
 
-Muse `send` does not pass `--wait`. trinity logs the ledger, sends once, then polls `messages` for the nonce and the next assistant reply. A timeout stops polling and **never calls send again**. `session_expired` tells you to run `muse-web-cli login`. `browser_down` tells you to run `muse-web-cli start --headless`. Pending items show up on `status` as 等你處理 ("waiting on you") when the count is greater than zero.
+Muse `send` does not pass `--wait`. trinity logs the ledger, sends once, then polls `messages` for the nonce and the next assistant reply. A timeout stops polling and **never calls send again**. Before a read or a send, trinity calls `chats`. A side chat is not sent into; status says 目前在副聊天室 and asks you to switch back to the main chat in the Muse window. That read does not move the cursor. If `chats` is unsupported or the switcher panel is missing, trinity keeps using the open conversation and says so on the status line. Chat titles are never printed. `status` also says whether the current chat is the main one or a side one. `session_expired` tells you to run `muse-web-cli login`. `browser_down` tells you to run `muse-web-cli start --headless`. Pending items show up on `status` as 等你處理 ("waiting on you") when the count is greater than zero.
 
 Every `ask` and `hand` send is logged to `~/.trinity-cli/ledger.jsonl` before it happens, then updated with the readback result. On a timeout trinity says so and **never resends**. `log` prints that ledger.
 

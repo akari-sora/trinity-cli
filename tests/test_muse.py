@@ -39,7 +39,7 @@ def _argv(runner):
 
 class MuseContractTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(__version__, "0.3.1")
+        self.assertEqual(__version__, "0.3.2")
 
     def test_each_exit_state_on_status(self):
         for state, want, hint in _STATES:
@@ -60,8 +60,11 @@ class MuseContractTests(unittest.TestCase):
         seat, _ = _seat(world)
         result = seat.status()
         self.assertEqual(result.state, "ok")
-        self.assertEqual([call[0] for call in world.calls], ["status"])
+        self.assertEqual([call[0] for call in world.calls], ["status", "chats"])
         self.assertIn("背景", result.value.summary)
+        self.assertIn("主聊天室", result.value.summary)
+        self.assertEqual(result.value.details["chat"], "main")
+        self.assertNotIn("SECRET_CHAT_TITLE", result.value.summary)
         self.assertEqual(result.value.waiting, [])
 
         world.pending_count = 2
@@ -71,7 +74,7 @@ class MuseContractTests(unittest.TestCase):
         ]
         world.calls.clear()
         result = seat.status()
-        self.assertEqual([call[0] for call in world.calls], ["status", "pending"])
+        self.assertEqual([call[0] for call in world.calls], ["status", "pending", "chats"])
         self.assertEqual(result.value.waiting, ["等你處理：核准行程", "等你處理：看一下記憶"])
 
         world.pending_count = 0
@@ -80,7 +83,7 @@ class MuseContractTests(unittest.TestCase):
         world.headless = False
         world.calls.clear()
         result = seat.status()
-        self.assertEqual([call[0] for call in world.calls], ["status"])
+        self.assertEqual([call[0] for call in world.calls], ["status", "chats"])
         self.assertIn("有視窗", result.value.summary)
         self.assertEqual(result.value.waiting, ["等你處理：最新回覆是卡片"])
 
@@ -240,8 +243,9 @@ class MuseContractTests(unittest.TestCase):
         self.assertEqual(result.state, "failed")
         self.assertIn("沒有送出", result.error)
         self.assertEqual(result.hint, "muse-web-cli login")
-        self.assertEqual([call[0] for call in world.calls], ["send"])
-        self.assertTrue(has_nonce(world.calls[0][-1], "abc123"))
+        self.assertEqual([call[0] for call in world.calls], ["chats", "send"])
+        send = next(call for call in world.calls if call[0] == "send")
+        self.assertTrue(has_nonce(send[-1], "abc123"))
 
     def test_memory_is_read_only_on_brief_diff_and_push_stays_a_draft(self):
         world = MuseWorld()
@@ -292,6 +296,8 @@ class MuseContractTests(unittest.TestCase):
         self.assertIn("普通回覆", text)
         self.assertNotIn(FAKE_JWT, text)
         self.assertNotIn("eyJ", text)
+        self.assertNotIn("SECRET_CHAT_TITLE", text)
+        self.assertNotIn("SECRET_SIDE_TITLE", text)
 
     def test_who_can_suggest_a_live_muse(self):
         world = MuseWorld()
@@ -301,7 +307,89 @@ class MuseContractTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("建議：Muse", out.getvalue())
         self.assertIn("不會送出", out.getvalue())
-        self.assertEqual([call[0] for call in world.calls], ["status"])
+        self.assertEqual([call[0] for call in world.calls], ["status", "chats"])
+
+    def test_side_chat_blocks_send(self):
+        world = MuseWorld()
+        world.chat = "side"
+        seat, _ = _seat(world)
+        result = seat.send(None, "你好", "abc123")
+        self.assertEqual(result.state, "failed")
+        self.assertIn("目前在副聊天室", result.error)
+        self.assertIn("沒有送出", result.error)
+        self.assertIn("主聊天室", result.hint)
+        self.assertEqual([call[0] for call in world.calls], ["chats"])
+        self.assertNotIn("SECRET_CHAT_TITLE", result.error)
+        self.assertNotIn("SECRET_SIDE_TITLE", result.hint)
+
+    def test_side_chat_read_does_not_advance_cursor(self):
+        world = MuseWorld()
+        world.chat = "side"
+        world.messages = [{"role": "assistant", "text": "副聊天室內容", "presentation": False}]
+        seat, _ = _seat(world)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        state = State(Path(tmp.name) / "state.json")
+        kept = {"id": "keep", "keys": ["keep"]}
+        state.save_cursors({"muse.messages": kept})
+        out = io.StringIO()
+        code = main(["digest"], seats=[seat], out=out, err=io.StringIO(), state=state)
+        text = out.getvalue()
+        self.assertEqual(code, 1)
+        self.assertIn("目前在副聊天室", text)
+        self.assertIn("切回主聊天室", text)
+        self.assertNotIn("副聊天室內容", text)
+        self.assertNotIn("SECRET_SIDE_TITLE", text)
+        self.assertEqual(state.cursors()["muse.messages"], kept)
+        self.assertNotIn("messages", [call[0] for call in world.calls])
+        self.assertNotIn("send", [call[0] for call in world.calls])
+
+    def test_main_chat_still_sends(self):
+        world = MuseWorld()
+        seat, _ = _seat(world)
+        result = seat.send(None, "你好", "abc123")
+        self.assertEqual(result.state, "ok")
+        self.assertEqual([call[0] for call in world.calls], ["chats", "send"])
+
+    def test_unsupported_chats_falls_back_with_a_status_note(self):
+        world = MuseWorld()
+        world.chat = "unsupported"
+        seat, _ = _seat(world)
+        status = seat.status()
+        self.assertEqual(status.state, "ok")
+        self.assertIn("chats 不支援，仍使用目前開啟的對話", status.value.summary)
+        self.assertEqual(status.value.details["chat"], "unknown")
+        self.assertNotIn("SECRET_CHAT_TITLE", status.value.summary)
+        world.calls.clear()
+        sent = seat.send(None, "你好", "abc123")
+        self.assertEqual(sent.state, "ok")
+        self.assertEqual([call[0] for call in world.calls], ["chats", "send"])
+
+    def test_missing_chat_panel_falls_back_with_a_status_note(self):
+        world = MuseWorld()
+        world.chat = "missing"
+        seat, _ = _seat(world)
+        status = seat.status()
+        self.assertEqual(status.state, "ok")
+        self.assertIn("切換面板不在，仍使用目前開啟的對話", status.value.summary)
+        self.assertEqual(status.value.details["chat"], "unknown")
+        world.calls.clear()
+        sent = seat.send(None, "你好", "abc123")
+        self.assertEqual(sent.state, "ok")
+        self.assertEqual([call[0] for call in world.calls], ["chats", "send"])
+
+    def test_status_shows_a_side_chat(self):
+        world = MuseWorld()
+        world.chat = "side"
+        seat, _ = _seat(world)
+        result = seat.status()
+        self.assertEqual(result.state, "ok")
+        self.assertIn("目前在副聊天室", result.value.summary)
+        self.assertEqual(result.value.details["chat"], "side")
+        self.assertEqual(result.value.hint, "在 Muse 視窗切回主聊天室後再讀、再送")
+        self.assertIn("目前在副聊天室", result.value.problems)
+        self.assertNotIn("SECRET_CHAT_TITLE", result.value.summary)
+        self.assertNotIn("SECRET_SIDE_TITLE", result.value.hint)
 
 
 if __name__ == "__main__":

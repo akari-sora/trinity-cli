@@ -115,7 +115,7 @@ class HandTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("不支援", text)
         self.assertEqual(origin.send_calls, 0)
-        self.assertEqual([call[0] for call in world.calls], ["send"])
+        self.assertEqual([call[0] for call in world.calls], ["chats", "send"])
         self.assertNotIn("--wait", [part for call in muse.runner.calls for part in call["argv"]])
         self.assertEqual([row["event"] for row in self.ledger.records()], ["sending", "unsupported"])
 

@@ -61,6 +61,11 @@ _ERRORS = {
     "ui_changed": "Muse 頁面結構對不上",
     "timeout": "Muse 頁面逾時",
 }
+SIDE_CHAT = "目前在副聊天室"
+SIDE_HINT = "在 Muse 視窗切回主聊天室後再讀、再送"
+_CHAT_UNSUPPORTED = "chats 不支援，仍使用目前開啟的對話"
+_CHAT_MISSING = "切換面板不在，仍使用目前開啟的對話"
+_CHAT_UNCLEAR = "看不出目前是主聊天室還是副聊天室，仍使用目前開啟的對話"
 
 
 class _Unsupported(Exception):
@@ -135,6 +140,30 @@ class MuseSeat(Seat):
             raise self._problem(proc, payload)
         return payload
 
+    def _chat(self) -> tuple[str, str]:
+        """Current chat kind, without titles.
+
+        `main` and `side` come from `chats`. `unknown` means trinity keeps the
+        old behavior (whatever is open) and the note belongs on the status line.
+        """
+        proc, payload = self._run(["chats"], timeout=45)
+        state = str(payload.get("state") or "")
+        missing = [str(item) for item in payload.get("missing")] if isinstance(payload.get("missing"), list) else []
+        if proc.code == 4 or state == "unsupported":
+            return "unknown", _CHAT_UNSUPPORTED
+        if "side_chats" in missing:
+            return "unknown", _CHAT_MISSING
+        if proc.timed_out or proc.code != 0 or state not in {"", "ok"}:
+            raise self._problem(proc, payload)
+        chats = payload.get("chats") if isinstance(payload.get("chats"), list) else []
+        current = next((item for item in chats if isinstance(item, dict) and item.get("is_current") is True), None)
+        kind = current.get("kind") if isinstance(current, dict) else None
+        if kind == "side":
+            return "side", ""
+        if kind == "main":
+            return "main", ""
+        return "unknown", _CHAT_UNCLEAR
+
     def _guard(self, fn):
         try:
             return fn()
@@ -180,16 +209,28 @@ class MuseSeat(Seat):
             backend = payload.get("backend")
             if isinstance(backend, str) and backend and backend != "browser":
                 parts.append(backend)
+            kind, note = self._chat()
+            hint = ""
+            if kind == "main":
+                parts.append("主聊天室")
+            elif kind == "side":
+                parts.append(SIDE_CHAT)
+                problems.append(SIDE_CHAT)
+                hint = SIDE_HINT
+            else:
+                parts.append(note)
             return Result.ok(
                 SeatStatus(
                     " · ".join(parts),
                     waiting,
                     problems,
+                    hint,
                     details={
                         "backend": payload.get("backend"),
                         "headless": payload.get("headless"),
                         "pending": count if isinstance(count, int) else 0,
                         "latest_assistant_is_card": bool(payload.get("latest_assistant_is_card")),
+                        "chat": kind,
                     },
                 )
             )
@@ -198,6 +239,9 @@ class MuseSeat(Seat):
 
     def read(self, cursors: dict, *, since: datetime | None = None, limit: int = MESSAGE_LIMIT) -> Result:
         def run() -> Result:
+            kind, _note = self._chat()
+            if kind == "side":
+                raise Problem(SIDE_CHAT, SIDE_HINT)
             bounded = min(LIMIT_MAX, max(1, limit))
             payload = self._payload(["messages", "--limit", str(bounded)])
             raw = payload.get("messages") if isinstance(payload.get("messages"), list) else []
@@ -228,6 +272,12 @@ class MuseSeat(Seat):
         return self._guard(run)
 
     def send(self, target: str | None, text: str, nonce: str) -> Result:
+        try:
+            kind, _note = self._chat()
+        except Problem as problem:
+            return Result.failed(f"{problem.error}，沒有送出", problem.hint)
+        if kind == "side":
+            return Result.failed(f"{SIDE_CHAT}，沒有送出", SIDE_HINT)
         body = with_nonce(text, nonce)
         try:
             proc, payload = self._run(["send", "--", body], timeout=90)
@@ -264,6 +314,8 @@ class MuseSeat(Seat):
                 return result
             if result.state != "ok":
                 last_error = result.error
+                if SIDE_CHAT in (result.error or ""):
+                    return Result.failed(result.error, result.hint)
             else:
                 outcome = result.value
                 messages = outcome.batches[0].items if isinstance(outcome, ReadOutcome) and outcome.batches else []
