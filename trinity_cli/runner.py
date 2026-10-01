@@ -9,6 +9,11 @@ import subprocess
 from dataclasses import dataclass
 
 
+# Browser approval and `codex login` wait on a person. Don't capture their output:
+# a token printed by the child must stay on the terminal, not in this process.
+LOGIN_TIMEOUT = 900
+
+
 @dataclass
 class Proc:
     code: int
@@ -43,6 +48,16 @@ class Runner:
         except subprocess.TimeoutExpired:
             return Proc(124, "", f"{os.path.basename(argv[0])} timed out after {timeout:.0f}s", timed_out=True)
         return Proc(done.returncode, done.stdout or "", done.stderr or "")
+
+    def attach(self, argv: list[str], *, timeout: float = LOGIN_TIMEOUT) -> Proc:
+        """Run with the caller's terminal. stdout and stderr are not captured."""
+        try:
+            done = subprocess.run(argv, timeout=timeout)
+        except FileNotFoundError:
+            return Proc(127, "", "")
+        except subprocess.TimeoutExpired:
+            return Proc(124, "", "", timed_out=True)
+        return Proc(done.returncode, "", "")
 
 
 def find_tool(name: str, env_var: str, fallbacks: tuple[str, ...] = ()) -> str | None:

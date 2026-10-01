@@ -13,7 +13,7 @@ from datetime import datetime
 from trinity_cli.model import Batch, Message, ReadOutcome, Result, SeatStatus, SendReceipt, SourceFailure, WaitOutcome
 from trinity_cli.schedules import parse_schedules
 from trinity_cli.redact import short_error
-from trinity_cli.runner import Runner, find_tool
+from trinity_cli.runner import LOGIN_TIMEOUT, Runner, find_tool
 from trinity_cli.seats.base import Problem, Seat
 from trinity_cli.util import has_nonce, iso, local_stamp, now_utc, one_line, parse_time, with_nonce
 
@@ -82,11 +82,17 @@ class DotSeat(Seat):
         clock=time.monotonic,
         sleep=time.sleep,
         now=now_utc,
+        *,
+        codex: str | None = None,
     ):
         self.runner = runner or Runner()
         self.binary = binary if binary is not None else find_tool(
             "chatgpt-dot-cli", "TRINITY_DOT_CLI", ("~/.local/bin/chatgpt-dot-cli",)
         )
+        if codex is None:
+            self.codex = find_tool("codex", "TRINITY_CODEX", ())
+        else:
+            self.codex = codex or None
         self.dot_id = dot_id if dot_id is not None else os.environ.get("TRINITY_DOT_ID") or None
         self.hostnames = hostnames if hostnames is not None else this_mac_names()
         self.include_activity = include_activity
@@ -122,6 +128,21 @@ class DotSeat(Seat):
             return json.loads(proc.out)
         except json.JSONDecodeError as exc:
             raise Problem(f"chatgpt-dot-cli {command} 的輸出不是 JSON", "更新 chatgpt-dot-cli") from exc
+
+    def login(self, *, mode: str = "token") -> Result:
+        """`codex login` owns the ChatGPT credential. trinity never reads the auth file."""
+        if mode != "token":
+            return Result.failed("這個旗標只給 Muse", "`trinity-cli login muse --help`")
+        if not self.codex:
+            return Result.failed("找不到 codex", "安裝 Codex 後執行 `codex login`")
+        proc = self.runner.attach([self.codex, "login"], timeout=LOGIN_TIMEOUT)
+        if proc.code == 127:
+            return Result.failed("找不到 codex", "安裝 Codex 後執行 `codex login`")
+        if proc.timed_out:
+            return Result.failed("codex login 逾時", "再執行一次 `trinity-cli login dot`")
+        if proc.code != 0:
+            return Result.failed("ChatGPT 登入沒有完成", FIX_LOGIN)
+        return Result.ok("ChatGPT 登入已完成。trinity 沒有讀取登入檔。")
 
     def _try(self, command: str, *args: str, timeout: float = 60.0) -> tuple[object, Problem | None]:
         try:

@@ -19,7 +19,7 @@ _STATES = (
     ("session_expired", "failed", "muse-web-cli login"),
     ("region_blocked", "failed", None),
     ("profile_busy", "failed", None),
-    ("credential_permissions", "failed", None),
+    ("credential_permissions", "failed", "chmod 600 ~/.trinity-cli/muse-credential"),
     ("ui_changed", "failed", None),
     ("timeout", "failed", None),
     ("unsupported", "unsupported", None),
@@ -54,6 +54,18 @@ class MuseContractTests(unittest.TestCase):
                 self.assertNotIn("send", [call[0] for call in world.calls])
             self.assertTrue(all(argv[:3] == ["muse-web-cli", "--json", "--autostart"] for argv in _argv(runner)))
             self.assertNotIn("--wait", [part for argv in _argv(runner) for part in argv])
+
+    def test_api_session_points_at_muse_login_not_the_browser(self):
+        world = MuseWorld()
+        world.backend = "api"
+        world.force["status"] = "session_expired"
+        seat, _ = _seat(world)
+        result = seat.status()
+        self.assertEqual(result.state, "failed")
+        self.assertIn("trinity-cli login muse", result.hint)
+        self.assertIn("自己放", result.hint)
+        self.assertIn("不讀", result.hint)
+        self.assertNotIn("muse-web-cli login", result.hint)
 
     def test_ok_status_skips_pending_until_there_is_something_to_do(self):
         world = MuseWorld()

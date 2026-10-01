@@ -50,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  trinity-cli who \"翻譯這段\"\n"
             "  trinity-cli brief diff\n"
             "  trinity-cli log --seat dot\n"
+            "  trinity-cli login muse\n"
             "--json may appear before or after the command.\n"
             "hand and brief push ask before sending; add --yes to skip the prompt.\n"
             "wait does not resend. It runs hand only when --then hand ... is written out."
@@ -104,6 +105,11 @@ def build_parser() -> argparse.ArgumentParser:
     brief_push = brief_sub.add_parser("push", help="write the brief to a seat that has an instruction API")
     brief_push.add_argument("--yes", action="store_true", help="write without asking; never messages Your dot or Muse")
     brief_push.add_argument("--grok-bot", help="which Grok bot to update")
+
+    login = sub.add_parser("login", help="sign in a seat; credentials are never printed")
+    login.add_argument("seat", choices=("dot", "grok", "muse"))
+    login.add_argument("--api-key", action="store_true", help="Muse only: pass an API key on stdin to `muse auth set`")
+    login.add_argument("--web", action="store_true", help="Muse only: headed `muse-web-cli login` (browser profile, not an API token)")
 
     log = sub.add_parser("log", help="show the send ledger")
     log.add_argument("--seat", choices=("dot", "grok", "muse"), help="only this seat")
@@ -242,6 +248,8 @@ def main(
             return 2
         if command == "log":
             return show(run_log(book, seat=args.seat, since=args.since, status=args.status, limit=args.limit), out, as_json)
+        if command == "login":
+            return cmd_login(seats, args, out, err, as_json)
     except BrokenPipeError:
         return 1
     parser.error(f"unknown command {command}")
@@ -304,3 +312,33 @@ def cmd_ask(seats, args, out, err, ledger: Ledger, stdin, as_json: bool) -> int:
     else:
         emit(out, render_ask(rows, nonce=nonce, timeout=args.timeout, ledger_path=str(ledger.path)))
     return ask_exit(rows)
+
+
+def cmd_login(seats, args, out, err, as_json: bool) -> int:
+    if args.api_key and args.web:
+        print("不能同時用 --api-key 和 --web。", file=err)
+        return 2
+    if (args.api_key or args.web) and args.seat != "muse":
+        print("只有 Muse 能用 --api-key 或 --web。", file=err)
+        return 2
+    seat = next((item for item in seats if item.key == args.seat), None)
+    if seat is None:
+        print(f"沒有 {args.seat} 這個座位。", file=err)
+        return 2
+    if args.web:
+        mode = "web"
+    elif args.api_key:
+        mode = "api-key"
+    else:
+        mode = "token"
+    result = seat.login(mode=mode)
+    ok = result.state == "ok"
+    message = str(result.value) if ok else result.error
+    text = f"{message}\n{result.hint}" if result.hint else message
+    data = {"seat": args.seat, "ok": ok, "message": message, "hint": result.hint}
+    emit(out, dumps(data) if as_json else text)
+    if ok:
+        return 0
+    if result.state == "unsupported":
+        return 2
+    return 1

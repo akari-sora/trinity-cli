@@ -41,11 +41,16 @@ class FakeRunner:
         self.calls: list[dict] = []
 
     def run(self, argv, *, stdin=None, timeout=60.0, env=None):
-        self.calls.append({"argv": list(argv), "stdin": stdin, "env": env})
+        self.calls.append({"argv": list(argv), "stdin": stdin, "env": env, "timeout": timeout})
         args = list(argv[1:])
         if args and args[0] == "--json":
             args = args[1:]
         return self.handler(args, stdin)
+
+    def attach(self, argv, *, timeout=60.0):
+        self.calls.append({"argv": list(argv), "stdin": None, "env": None, "timeout": timeout, "attach": True})
+        args = list(argv[1:])
+        return self.handler(args, None)
 
     def commands(self) -> list[str]:
         out = []

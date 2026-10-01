@@ -263,6 +263,15 @@ class GrokSeat(Seat):
     def supports_after(self) -> bool:
         return "--after" in self._help_text()
 
+    def login(self, *, mode: str = "token") -> Result:
+        """Grok's credential stays in the app. trinity does not read it or start a login."""
+        if mode != "token":
+            return Result.failed("這個旗標只給 Muse", "`trinity-cli login muse --help`")
+        return Result.failed(
+            "Grok Bot 的登入在 Grok Bot app，trinity 不代登，也不讀 app 的登入",
+            FIX_APP,
+        )
+
     def _doctor_problem(self) -> Problem | None:
         try:
             payload = self._json("doctor", timeout=20)

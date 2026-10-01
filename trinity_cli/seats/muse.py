@@ -34,13 +34,27 @@ from trinity_cli.model import (
     WaitOutcome,
 )
 from trinity_cli.redact import short_error
-from trinity_cli.runner import Runner, find_tool
+from trinity_cli.runner import LOGIN_TIMEOUT, Runner, find_tool
 from trinity_cli.seats.base import Problem, Seat
 from trinity_cli.util import WINDOW_CURSOR, WINDOW_CURSOR_ID, has_nonce, now_utc, one_line, with_nonce
 
 FIX_INSTALL = "安裝 muse-web-cli，或用 TRINITY_MUSE_CLI 指定路徑"
+FIX_MUSE = "安裝 Muse Code，或用 TRINITY_MUSE 指定路徑"
 FIX_LOGIN = "muse-web-cli login"
 FIX_START = "muse-web-cli start --headless"
+FIX_TOKEN = (
+    "執行 `trinity-cli login muse`（憑證留在 muse，不會寫入這個檔）。"
+    "金鑰用 `trinity-cli login muse --api-key`。"
+    "~/.trinity-cli/muse-credential 仍要自己放，權限 600。trinity 不讀、不複製"
+)
+FIX_CHMOD = "chmod 600 ~/.trinity-cli/muse-credential"
+_TOKEN_OK = (
+    "Muse 登入已完成。憑證留在 muse 自己的設定裡，trinity 沒有讀取，"
+    "也沒有寫入 ~/.trinity-cli/muse-credential。"
+)
+_KEY_OK = "已把標準輸入交給 muse auth set。trinity 沒有保存金鑰。"
+_WEB_OK = "Muse 網頁已登入。接著可以執行 `muse-web-cli start --headless`。"
+_WEB_WAIT = "請在開啟的 Chrome 視窗登入 Muse。這個工具不會輸入帳號密碼。"
 FIRST_READ = 10
 MESSAGE_LIMIT = 40
 LIMIT_MAX = 100
@@ -51,6 +65,7 @@ _PAGE = {"ui_changed", "timeout"}
 _HINTS = {
     "session_expired": FIX_LOGIN,
     "browser_down": FIX_START,
+    "credential_permissions": FIX_CHMOD,
 }
 _ERRORS = {
     "browser_down": "Muse 的瀏覽器沒有啟動",
@@ -82,6 +97,17 @@ def _object(text: str) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def _hint(state: str, payload: dict) -> str:
+    error = payload.get("error") if isinstance(payload.get("error"), str) else ""
+    if state == "session_expired" and (payload.get("backend") == "api" or "muse-credential" in error):
+        return FIX_TOKEN
+    hint = _HINTS.get(state) or ""
+    if hint:
+        return hint
+    raw = payload.get("hint")
+    return raw if isinstance(raw, str) else ""
+
+
 def _content_key(role: str, text: str, seen: dict[str, int]) -> str:
     digest = hashlib.sha256(f"{role}\n{text}".encode()).hexdigest()[:12]
     seen[digest] = seen.get(digest, 0) + 1
@@ -93,12 +119,25 @@ class MuseSeat(Seat):
     label = "Muse"
     unsupported_reason = "不支援"
 
-    def __init__(self, runner: Runner | None = None, binary: str | None = None, *, clock=None, sleep=None, now=None):
+    def __init__(
+        self,
+        runner: Runner | None = None,
+        binary: str | None = None,
+        *,
+        clock=None,
+        sleep=None,
+        now=None,
+        token_binary: str | None = None,
+    ):
         self.runner = runner or Runner()
         if binary is None:
             self.binary = find_tool("muse-web-cli", "TRINITY_MUSE_CLI", ("~/.local/bin/muse-web-cli",))
         else:
             self.binary = binary or None
+        if token_binary is None:
+            self.token_binary = find_tool("muse", "TRINITY_MUSE", ("~/.local/bin/muse",))
+        else:
+            self.token_binary = token_binary or None
         self.clock = clock or time.monotonic
         self.sleep = sleep or time.sleep
         self.now = now or now_utc
@@ -123,10 +162,57 @@ class MuseSeat(Seat):
         error = payload.get("error") if isinstance(payload.get("error"), str) and payload.get("error") else ""
         if not error:
             error = _ERRORS.get(state) or short_error(proc.err) or "Muse 讀取失敗"
-        hint = _HINTS.get(state) or ""
-        if not hint and isinstance(payload.get("hint"), str):
-            hint = payload["hint"]
-        return Problem(error, hint)
+        return Problem(error, _hint(state, payload))
+
+    def _attach_muse(self, args: list[str], *, ok: str, bad: str) -> Result:
+        """Public `muse` CLI. The child's output is not captured, so a token never lands here."""
+        if not self.token_binary:
+            return Result.failed("找不到 muse", FIX_MUSE)
+        proc = self.runner.attach([self.token_binary, *args], timeout=LOGIN_TIMEOUT)
+        if proc.code == 127:
+            return Result.failed("找不到 muse", FIX_MUSE)
+        if proc.timed_out:
+            return Result.failed("Muse 登入逾時", "再執行一次 `trinity-cli login muse`")
+        if proc.code != 0:
+            return Result.failed(bad, FIX_TOKEN)
+        return Result.ok(ok)
+
+    def login(self, *, mode: str = "token") -> Result:
+        """Token: `muse login` or `muse auth set`. Web seat: `muse-web-cli login`.
+
+        trinity does not read ~/.config/muse/auth.json and does not copy a credential
+        into ~/.trinity-cli/muse-credential.
+        """
+        if mode == "api-key":
+            return self._attach_muse(
+                ["auth", "set", "--provider", "meta", "--api-key-stdin"],
+                ok=_KEY_OK,
+                bad="Muse 金鑰沒有存進去",
+            )
+        if mode == "web":
+            return self._web_login()
+        if mode != "token":
+            return Result.failed("看不懂的登入方式", "`trinity-cli login muse --help`")
+        return self._attach_muse(["login"], ok=_TOKEN_OK, bad="Muse 登入沒有完成")
+
+    def _web_login(self) -> Result:
+        if not self.binary:
+            return Result.failed("找不到 muse-web-cli", FIX_INSTALL)
+        proc = self.runner.run([self.binary, "--json", "login"], timeout=LOGIN_TIMEOUT)
+        if proc.code == 127:
+            return Result.failed("找不到 muse-web-cli", FIX_INSTALL)
+        payload = _object(proc.out)
+        if proc.timed_out and not payload.get("state"):
+            return Result.failed("Muse 網頁登入逾時", FIX_LOGIN)
+        if not payload and proc.code == 0 and not proc.timed_out:
+            return Result.failed("muse-web-cli login 的輸出不是 JSON", "更新 muse-web-cli 後重試")
+        state = str(payload.get("state") or "")
+        if payload.get("logged_in") is True and state in {"", "ok"} and proc.code == 0 and not proc.timed_out:
+            return Result.ok(_WEB_OK)
+        if state in {"", "ok"} and proc.code == 0 and not proc.timed_out:
+            return Result.failed(_WEB_WAIT, FIX_LOGIN)
+        problem = self._problem(proc, payload)
+        return Result.failed(problem.error, problem.hint)
 
     def _payload(self, args: list[str], *, timeout: float = 45.0) -> dict:
         proc, payload = self._run(args, timeout=timeout)

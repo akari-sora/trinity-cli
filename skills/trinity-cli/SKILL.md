@@ -12,7 +12,7 @@ description: >-
   「agent 有什麼新消息」「幫我看一下 dot、Grok 和 Muse」「整理一下新訊息」
   「同一個問題問所有 agent」「問 dot」「問蝴蝶」「問 Muse」「把這則轉給 Grok」
   「轉交」「等 dot 回」「有沒有排程」「該派誰」「更新 brief」
-  「看送出紀錄」時使用。
+  「看送出紀錄」「幫 muse 取 token」「登入 muse」時使用。
 ---
 
 # trinity-cli
@@ -28,6 +28,7 @@ Reply in the user's language.
 7. Run `trinity-cli schedules` to list automations and any duplicate titles. Run `trinity-cli who "task"` when the user asks which seat fits. Quote it as a suggestion. Do not send because of it.
 8. The shared brief is `~/.trinity-cli/brief.md`. Use `brief show` and `brief diff` freely. If the file is missing, `brief diff` exits 0 and points at `brief init`. `brief init` writes a short template only when the file does not exist. `brief diff` may read Muse memory; that read does not write. Use `brief push` only when the user asked to update instructions. It can write a Grok bot's instructions after confirmation; Your dot and Muse only get a draft, and that draft must not be sent with `ask` unless the user asked for a send.
 9. Use `trinity-cli log` to read the ledger. Use `--json` when you need to parse output.
+10. Run `trinity-cli login muse` only when the user asked to sign Muse in or obtain its token. It runs the public `muse login` (browser approval). `--api-key` passes stdin to `muse auth set --api-key-stdin`. `--web` runs `muse-web-cli login` for the browser seat. Do not read or print the credential, and do not copy it into `~/.trinity-cli/muse-credential`; the user places that file. `login dot` runs `codex login`. `login grok` only repeats the Grok Bot app instructions. A missing api credential on status is `trinity-cli login muse`, not the browser login.
 
 Rules:
 

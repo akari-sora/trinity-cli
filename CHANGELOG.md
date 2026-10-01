@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `trinity-cli login muse` 執行公開的 `muse login`（瀏覽器核准）。`--api-key` 把標準輸入交給 `muse auth set --api-key-stdin`。`--web` 才是 `muse-web-cli login`。trinity 不讀、不印、不複製憑證，也不寫入 `~/.trinity-cli/muse-credential`。api 後端缺憑證時，status 改提示這條。
+
 ## 0.3.2
 
 - Muse 讀取（digest、ask 回讀、wait）和送出之前會先看 `muse-web-cli chats`。目前開著副聊天室時不送出，狀態寫「目前在副聊天室」，並提示在 Muse 視窗切回主聊天室；這種讀取不算主對話，也不推進讀取位置。`chats` 不支援或切換面板不在時，仍使用目前開啟的對話，並在 status 註明。聊天室標題不會印出來。

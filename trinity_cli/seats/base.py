@@ -59,3 +59,7 @@ class Seat:
     def memory(self) -> Result:
         """Read a seat's memory text. Never writes."""
         return Result.unsupported(self.unsupported_reason)
+
+    def login(self, *, mode: str = "token") -> Result:
+        """Sign the user in through that seat's own CLI. Never reads or prints a credential."""
+        return Result.unsupported(self.unsupported_reason)
