@@ -99,24 +99,46 @@ release-check:
       print(f"{tag} matches pyproject.toml and CHANGELOG.md")
       PY
 
-# Hosted Windows runners do not use a Docker image. Inherit only retry settings
-# so this job is not also tagged grok-box (those runners would never match).
-# Hosted Windows spends shared minutes. Always on tags, merge requests, and
-# manual web runs. On main, only when shipped code, tests, or packaging change.
-# A commit that only touches this file still runs Linux and skips Windows.
+# Windows jobs must not inherit the grok-box tags. Tags, manual web runs, and
+# main pushes that change shipped code, tests, or packaging. A CI-only push
+# still runs Linux only. Merge requests are manual: the self-hosted runner
+# accepts protected refs only, so an unprotected source branch must not block.
+.windows_python: &windows_python
+  interruptible: true
+  timeout: 20m
+  variables:
+    UV_CACHE_DIR: "$CI_PROJECT_DIR/.cache/uv"
+  cache:
+    key: uv-win
+    paths:
+      - .cache/uv
+  script:
+    - |
+      $ErrorActionPreference = "Stop"
+      $env:UV_CACHE_DIR = Join-Path $env:CI_PROJECT_DIR ".cache/uv"
+      if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        $env:UV_INSTALL_DIR = Join-Path $env:CI_PROJECT_DIR ".uv"
+        irm https://astral.sh/uv/install.ps1 | iex
+        $env:Path = "$env:UV_INSTALL_DIR;$env:Path"
+      }
+      uv venv .venv --python 3.12
+      uv pip install -e . --python .\.venv\Scripts\python.exe
+      .\.venv\Scripts\python.exe -m unittest discover -s tests
+
 test:windows:
+  <<: *windows_python
   stage: test
   inherit:
     default: [retry]
-  tags: [saas-windows-medium-amd64]
-  interruptible: true
-  timeout: 20m
+  tags: [windows, hx370]
   needs:
     - job: test
     - job: test:py311
     - job: contract:muse
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
     - if: $CI_COMMIT_TAG
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_COMMIT_BRANCH == "main"
@@ -125,25 +147,33 @@ test:windows:
         - tests/**/*
         - pyproject.toml
         - uv.lock
-  variables:
-    UV_INSTALL_DIR: '$CI_PROJECT_DIR\uv-install'
-    UV_CACHE_DIR: '$CI_PROJECT_DIR\.cache\uv'
-  cache:
-    key: uv-win
-    paths:
-      - .cache/uv
-      - uv-install
-  script:
-    - |
-      $ErrorActionPreference = "Stop"
-      $env:Path = "$env:UV_INSTALL_DIR;$env:USERPROFILE\.local\bin;" + $env:Path
-      if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-        irm https://astral.sh/uv/install.ps1 | iex
-        $env:Path = "$env:UV_INSTALL_DIR;$env:USERPROFILE\.local\bin;" + $env:Path
-      }
-      uv venv .venv
-      uv pip install -e . --python .\.venv\Scripts\python.exe
-      .\.venv\Scripts\python.exe -m unittest discover -s tests
+
+# Same tests on a GitLab-hosted runner. Starts only when someone plays it.
+windows:hosted:
+  <<: *windows_python
+  stage: test
+  inherit:
+    default: [retry]
+  tags: [saas-windows-medium-amd64]
+  allow_failure: true
+  needs:
+    - job: test
+    - job: test:py311
+    - job: contract:muse
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+    - if: $CI_COMMIT_TAG
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - trinity_cli/**/*
+        - tests/**/*
+        - pyproject.toml
+        - uv.lock
+      when: manual
 
 release:
   stage: release
@@ -199,7 +229,7 @@ release:
           "",
           "## Platforms",
           "- Linux: CI on the grok-box runner.",
-          "- Windows: CI on GitLab hosted runners (saas-windows-medium-amd64).",
+          "- Windows: CI on a self-hosted Windows runner.",
           "- macOS: local development and live checks.",
           "",
           "## Install",
