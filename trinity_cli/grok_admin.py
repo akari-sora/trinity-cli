@@ -6,10 +6,11 @@ import json
 
 from trinity_cli.config import load_grok_seats, read_config
 from trinity_cli.runner import find_tool
-from trinity_cli.seats.grok import GBOT_FALLBACKS, SANDBOX_GONE
+from trinity_cli.seats.grok import FIX_INSTALL, GBOT_FALLBACKS, SANDBOX_GONE
 from trinity_cli.state import home
 
 _GONE_HINT = "在 Grok Bot app 重新登入這個帳號。gbot 沒有重新登入的指令。"
+MISSING_GBOT = "找不到 gbot"
 
 
 def _gone(text: str) -> bool:
@@ -21,7 +22,7 @@ def discover(runner, binary: str | None = None) -> list[dict]:
     """One row per bot, plus one row when a whole login cannot be listed."""
     binary = binary or find_tool("gbot", "TRINITY_GBOT", GBOT_FALLBACKS)
     if not binary:
-        return [{"account": "", "name": "", "description": "", "reachable": False, "reason": "找不到 gbot", "seat": ""}]
+        return [{"account": "", "name": "", "description": "", "reachable": False, "reason": MISSING_GBOT, "seat": ""}]
     proc = runner.run([binary, "--json", "accounts"], timeout=30)
     try:
         payload = json.loads(proc.out) if proc.code == 0 and proc.out.strip() else {}
@@ -102,20 +103,27 @@ def _configured() -> dict[tuple[str, str], str]:
     return found
 
 
+ADD_HINT = "加一個座位：trinity-cli grok add NAME --account LABEL --bot BOT --default"
+
+
 def render_bots(rows: list[dict]) -> str:
     if not rows:
-        return "沒有 bot。"
+        return "gbot 看不到任何 bot。打開 Grok Bot app 登入並建立一個 bot，再跑 `trinity-cli grok bots`。"
     lines = []
     for row in rows:
         if not row.get("reachable"):
             where = row.get("account") or "（沒有標籤）"
             seat = f"  seat {row['seat']}" if row.get("seat") else ""
             lines.append(f"{where}  {row.get('reason') or SANDBOX_GONE}{seat}")
+            if row.get("reason") == MISSING_GBOT:
+                lines.append(f"→ {FIX_INSTALL}")
             continue
         seat = f"  seat {row['seat']}" if row.get("seat") else ""
         desc = row.get("description") or ""
         extra = f"  {desc}" if desc else ""
         lines.append(f"{row['account']}  {row['name']}  reachable{seat}{extra}")
+    if any(row.get("reachable") and not row.get("seat") for row in rows):
+        lines.append(f"→ {ADD_HINT}")
     return "\n".join(lines)
 
 

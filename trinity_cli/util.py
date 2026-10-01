@@ -13,6 +13,13 @@ WINDOW_CURSOR_ID = "trinity-window"
 WINDOW_CURSOR = {"id": WINDOW_CURSOR_ID, "at": "1970-01-01T00:00:00+00:00"}
 
 
+def decode_text(raw: bytes) -> str:
+    """UTF-8 with or without a BOM, or UTF-16 with a BOM (what PowerShell 5.1 `>` writes)."""
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return raw.decode("utf-16")
+    return raw.decode("utf-8-sig")
+
+
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 

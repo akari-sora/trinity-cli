@@ -203,7 +203,7 @@ class GrokReadTests(unittest.TestCase):
         world = GrokWorld(transcripts={BOT_ID: [grok_entry("e1", "user", "q"), grok_entry("e2", "assistant", "a")]})
         batch = self.seat(world).read({f"grok.{BOT_ID}": {"id": "e1"}}).value.batches[0]
         self.assertFalse(batch.gap)
-        self.assertEqual([(m.speaker, m.text) for m in batch.items], [("蝴蝶", "a")])
+        self.assertEqual([(m.speaker, m.text) for m in batch.items], [("研究員", "a")])
 
     def test_uses_after_when_gbot_supports_it(self):
         world = GrokWorld(transcripts={BOT_ID: [grok_entry("e1", "user", "q"), grok_entry("e2", "assistant", "a")]},
@@ -231,7 +231,7 @@ class GrokReadTests(unittest.TestCase):
         self.assertNotIn(BOT_ID, out.getvalue())
 
     def test_one_bot_failing_does_not_hide_the_others(self):
-        bots = [{"id": BOT_ID, "name": "蝴蝶", "kind": "bot"}, {"id": "b-two", "name": "Two", "kind": "bot"}]
+        bots = [{"id": BOT_ID, "name": "研究員", "kind": "bot"}, {"id": "b-two", "name": "Two", "kind": "bot"}]
         world = GrokWorld(transcripts={BOT_ID: [grok_entry("e1", "assistant", "ok")]}, bots=bots)
         original = world.__call__
 

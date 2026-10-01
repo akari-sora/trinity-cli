@@ -16,6 +16,15 @@ def home() -> Path:
     return Path.home() / ".trinity-cli"
 
 
+def tilde(path: Path | str) -> str:
+    """Text output shows ~ instead of the home directory, so pasted output carries no user name."""
+    try:
+        rest = Path(path).resolve().relative_to(Path.home().resolve())
+    except (ValueError, OSError, RuntimeError):
+        return str(path)
+    return str(Path("~") / rest)
+
+
 class State:
     def __init__(self, path: Path | None = None):
         self.path = path or home() / "state.json"
@@ -26,7 +35,7 @@ class State:
                 data = json.load(handle)
         except FileNotFoundError:
             return {"version": 1, "cursors": {}}
-        except (OSError, json.JSONDecodeError):
+        except (OSError, ValueError):
             return {"version": 1, "cursors": {}, "unreadable": True}
         if not isinstance(data, dict) or not isinstance(data.get("cursors"), dict):
             return {"version": 1, "cursors": {}}

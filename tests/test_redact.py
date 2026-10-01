@@ -76,8 +76,8 @@ class NoSecretsInOutputTests(unittest.TestCase):
             ["--json", "status"],
             ["digest", "--peek"],
             ["--json", "digest", "--peek"],
-            ["ask", "all", "hi", "--grok-bot", "蝴蝶", "--timeout", "0"],
-            ["--json", "ask", "all", "hi", "--grok-bot", "蝴蝶", "--timeout", "0"],
+            ["ask", "all", "hi", "--grok-bot", "研究員", "--timeout", "0"],
+            ["--json", "ask", "all", "hi", "--grok-bot", "研究員", "--timeout", "0"],
             ["schedules"],
             ["--json", "schedules"],
             ["who", "翻譯這段"],
@@ -85,7 +85,7 @@ class NoSecretsInOutputTests(unittest.TestCase):
             ["brief", "show"],
             ["brief", "diff"],
             ["brief", "push"],
-            ["hand", "dot#last", "--to", "grok:蝴蝶", "看一下"],
+            ["hand", "dot#last", "--to", "grok:研究員", "看一下"],
             ["wait", "dot", "--timeout", "0"],
         )
         for argv in commands:

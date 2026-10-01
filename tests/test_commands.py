@@ -12,6 +12,7 @@ from trinity_cli.seats.base import Seat
 
 
 class SchedulingSeat(Seat):
+    family = "grok"
     key = "grok"
     label = "Grok Bot"
 
@@ -229,7 +230,7 @@ class LogTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         ledger = Ledger(Path(tmp.name) / "ledger.jsonl")
         ledger.append({"event": "result", "seat": "dot", "target": "Your dot", "reply": "replied", "readback": "confirmed", "at": "2026-10-01T01:00:00+00:00"})
-        ledger.append({"event": "result", "seat": "grok", "target": "Grok Bot/蝴蝶", "reply": "timed_out", "readback": "not_seen", "at": "2026-10-01T02:00:00+00:00", "reply_key": "msg_secretkey0001"})
+        ledger.append({"event": "result", "seat": "grok", "target": "Grok Bot/研究員", "reply": "timed_out", "readback": "not_seen", "at": "2026-10-01T02:00:00+00:00", "reply_key": "msg_secretkey0001"})
         ledger.append({"event": "not_sent", "seat": "dot", "target": "Your dot", "error": "token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.sig", "at": "2026-10-01T00:00:00+00:00"})
         out = io.StringIO()
         code = main(["log", "--seat", "dot", "--status", "replied"], seats=[unsupported_muse()], out=out, err=io.StringIO(), ledger=ledger)

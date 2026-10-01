@@ -53,7 +53,7 @@ class TimeoutNeverResendsTests(AskTestCase):
         world = GrokWorld()
         world.send_result = fail(1, "sendPrompt timed out after 15000ms; delivery is unknown. Do not resend automatically.")
         seat = self.grok(world)
-        code, text = self.ask([seat], "grok", "蝴蝶", "status?", "--timeout", "30", "--poll", "10")
+        code, text = self.ask([seat], "grok", "研究員", "status?", "--timeout", "30", "--poll", "10")
         self.assertEqual(code, 1)
         self.assertEqual(seat.runner.commands().count("send"), 1)
         self.assertEqual(len(world.sent), 1)
@@ -68,7 +68,7 @@ class TimeoutNeverResendsTests(AskTestCase):
     def test_grok_delivered_but_silent_times_out_without_resend(self):
         world = GrokWorld()
         seat = self.grok(world)
-        code, text = self.ask([seat], "grok", "蝴蝶", "ping", "--timeout", "20", "--poll", "5")
+        code, text = self.ask([seat], "grok", "研究員", "ping", "--timeout", "20", "--poll", "5")
         self.assertEqual(code, 1)
         self.assertEqual(seat.runner.commands().count("send"), 1)
         self.assertIn("⏱ 等了 20 秒沒有回覆，沒有重送", text)
@@ -97,7 +97,7 @@ class TimeoutNeverResendsTests(AskTestCase):
         }
         world = GrokWorld(transcripts={BOT_ID: [user, approval, empty, reply]})
         seat = self.grok(world)
-        receipt = SendReceipt("Grok Bot/蝴蝶", BOT_ID, "abc123", datetime.now(timezone.utc), "unknown")
+        receipt = SendReceipt("Grok Bot/研究員", BOT_ID, "abc123", datetime.now(timezone.utc), "unknown")
         result = seat.wait(receipt, timeout=5, poll=1)
         self.assertEqual(result.state, "ok")
         self.assertTrue(result.value.delivered)
@@ -109,12 +109,12 @@ class TimeoutNeverResendsTests(AskTestCase):
     def test_quoted_ask_uses_the_configured_bot(self):
         import os
 
-        world = GrokWorld(bots=[{"id": BOT_ID, "name": "Main", "kind": "bot"}, {"id": "b2", "name": "Two", "kind": "bot"}])
+        world = GrokWorld(bots=[{"id": BOT_ID, "name": "Writer", "kind": "bot"}, {"id": "b2", "name": "Two", "kind": "bot"}])
         seat = self.grok(world)
         old = os.environ.get("TRINITY_GROK_BOT")
-        os.environ["TRINITY_GROK_BOT"] = "Main"
+        os.environ["TRINITY_GROK_BOT"] = "Writer"
         try:
-            seat.default_bot = "Main"
+            seat.default_bot = "Writer"
             code, text = self.ask([seat], "grok", "請只回一句", "--timeout", "0", "--poll", "1")
         finally:
             if old is None:
@@ -125,7 +125,7 @@ class TimeoutNeverResendsTests(AskTestCase):
         self.assertEqual(len(world.sent), 1)
         self.assertIn("沒有重送", text)
         send = next(call for call in seat.runner.calls if "send" in call["argv"] and "--help" not in call["argv"])
-        self.assertIn("Main", send["argv"])
+        self.assertIn("Writer", send["argv"])
 
     def test_dot_timeout_never_resends(self):
         world = DotWorld()
@@ -166,15 +166,15 @@ class AskFlowTests(AskTestCase):
         def grok_handler(args, stdin):
             proc = original_grok(args, stdin)
             if args[0] == "send":
-                grok_world.transcripts[BOT_ID].append(grok_entry("r1", "assistant", "蝴蝶的回答"))
+                grok_world.transcripts[BOT_ID].append(grok_entry("r1", "assistant", "研究員的回答"))
             return proc
 
         dot_seat.runner = FakeRunner(dot_handler)
         grok_seat.runner = FakeRunner(grok_handler)
-        code, text = self.ask([dot_seat, grok_seat, unsupported_muse()], "all", "今天進度？", "--grok-bot", "蝴蝶")
+        code, text = self.ask([dot_seat, grok_seat, unsupported_muse()], "all", "今天進度？", "--grok-bot", "研究員")
         self.assertEqual(code, 0)
         self.assertIn("dot 的回答", text)
-        self.assertIn("蝴蝶的回答", text)
+        self.assertIn("研究員的回答", text)
         self.assertIn("不支援", text)
         self.assertIn(" │ ", text)
         self.assertEqual(len(dot_world.sent), 1)
@@ -186,7 +186,7 @@ class AskFlowTests(AskTestCase):
         world = GrokWorld()
         world.transcripts[BOT_ID] = []
         seat = self.grok(world)
-        self.ask([seat], "grok", "蝴蝶", "  hello  ", "--timeout", "0")
+        self.ask([seat], "grok", "研究員", "  hello  ", "--timeout", "0")
         body = world.sent[0]
         self.assertEqual(body, body.strip())
         head, tag = body.rsplit("\n\n", 1)
@@ -222,7 +222,7 @@ class AskFlowTests(AskTestCase):
         self.assertEqual(self.events(), ["sending", "not_sent"])
 
     def test_grok_needs_a_bot_when_there_are_several(self):
-        bots = [{"id": BOT_ID, "name": "蝴蝶", "kind": "bot"}, {"id": "b2", "name": "Two", "kind": "bot"}]
+        bots = [{"id": BOT_ID, "name": "研究員", "kind": "bot"}, {"id": "b2", "name": "Two", "kind": "bot"}]
         world = GrokWorld(bots=bots)
         seat = self.grok(world)
         code, text = self.ask([seat, unsupported_muse()], "all", "hi")

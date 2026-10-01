@@ -6,11 +6,11 @@ import difflib
 from pathlib import Path
 
 from trinity_cli.app import call
-from trinity_cli.targets import default_grok
+from trinity_cli.targets import default_grok, is_grok
 from trinity_cli.model import FAILED, OK, UNSUPPORTED, InstructionText
 from trinity_cli.shown import Shown
-from trinity_cli.state import Ledger
-from trinity_cli.util import iso, now_utc
+from trinity_cli.state import Ledger, tilde
+from trinity_cli.util import decode_text, iso, now_utc
 
 _LIMIT = 32000
 _YES = {"y", "yes", "是"}
@@ -18,11 +18,13 @@ _YES = {"y", "yes", "是"}
 
 def _read(path: Path) -> tuple[str | None, str | None]:
     try:
-        return path.read_text(encoding="utf-8"), None
+        return decode_text(path.read_bytes()), None
     except FileNotFoundError:
         return None, "missing"
     except OSError as exc:
-        return None, str(exc)
+        return None, exc.strerror or type(exc).__name__
+    except UnicodeDecodeError:
+        return None, "不是 UTF-8 或 UTF-16 文字檔，請用 UTF-8 存檔"
 
 
 def _as_list(value: object) -> list[InstructionText]:
@@ -57,10 +59,6 @@ def _diff(current: str, wanted: str) -> str:
     return "\n".join(lines[:80]) if lines else "相同"
 
 
-def _is_grok(seat) -> bool:
-    return seat.key == "grok" or str(seat.key).startswith("grok-")
-
-
 def _focus(seats, seat_name: str | None):
     if seat_name and seat_name != "grok":
         found = next((seat for seat in seats if seat.key == seat_name), None)
@@ -70,7 +68,7 @@ def _focus(seats, seat_name: str | None):
 
 
 def _target_for(seat, grok_bot: str | None) -> str | None:
-    if not _is_grok(seat):
+    if not is_grok(seat):
         return None
     return grok_bot or getattr(seat, "default_bot", None) or None
 
@@ -78,10 +76,14 @@ def _target_for(seat, grok_bot: str | None) -> str | None:
 def run_show(path: Path) -> Shown:
     text, error = _read(path)
     if error == "missing":
-        return Shown(0, f"還沒有 brief：{path}", {"path": str(path), "missing": True})
+        return Shown(
+            0,
+            f"還沒有 brief：{tilde(path)}\n建立一份：`trinity-cli brief init`，或直接編輯這個檔案。",
+            {"path": str(path), "missing": True},
+        )
     if error:
         return Shown(1, f"讀不到 brief：{error}", {"path": str(path), "error": error})
-    return Shown(0, f"{path}\n\n{text.rstrip()}", {"path": str(path), "text": text})
+    return Shown(0, f"{tilde(path)}\n\n{text.rstrip()}", {"path": str(path), "text": text})
 
 
 _TEMPLATE = """# brief
@@ -95,13 +97,13 @@ Your dot 和 Muse 沒有指令 API，push 只會印出草稿。
 
 def run_init(path: Path) -> Shown:
     if path.exists():
-        return Shown(0, f"brief 已經存在，沒有覆寫：{path}", {"path": str(path), "created": False})
+        return Shown(0, f"brief 已經存在，沒有覆寫：{tilde(path)}", {"path": str(path), "created": False})
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(_TEMPLATE, encoding="utf-8")
     except OSError as exc:
         return Shown(1, f"寫不了 brief：{exc}", {"path": str(path), "created": False, "error": str(exc)})
-    return Shown(0, f"已建立 {path}", {"path": str(path), "created": True})
+    return Shown(0, f"已建立 {tilde(path)}", {"path": str(path), "created": True})
 
 
 def run_diff(seats, path: Path, *, grok_bot: str | None = None, grok_seat: str | None = None) -> Shown:
@@ -109,17 +111,17 @@ def run_diff(seats, path: Path, *, grok_bot: str | None = None, grok_seat: str |
     if error == "missing":
         return Shown(
             0,
-            f"還沒有 brief：{path}\n建立一份：`trinity-cli brief init`，或直接編輯這個檔案。",
+            f"還沒有 brief：{tilde(path)}\n建立一份：`trinity-cli brief init`，或直接編輯這個檔案。",
             {"path": str(path), "missing": True},
         )
     if error:
         return Shown(1, f"讀不到 brief：{error}", {"path": str(path), "error": error})
-    lines = [str(path), ""]
+    lines = [tilde(path), ""]
     rows = []
     failed = False
     focus = _focus(seats, grok_seat)
     for seat in seats:
-        if _is_grok(seat) and seat is not focus:
+        if is_grok(seat) and seat is not focus:
             continue
         if seat.supports("memory"):
             result = call(seat, "memory")
@@ -178,11 +180,11 @@ def run_push(
 ) -> Shown:
     text, error = _read(path)
     if error == "missing" or text is None:
-        return Shown(2, f"還沒有 brief，沒有寫入：{path}", {"path": str(path), "updated": [], "sent": False})
+        return Shown(2, f"還沒有 brief，沒有寫入：{tilde(path)}", {"path": str(path), "updated": [], "sent": False})
     if error:
         return Shown(1, f"讀不到 brief：{error}", {"path": str(path), "updated": [], "sent": False})
     if not text.strip():
-        return Shown(2, f"brief 是空的，沒有寫入：{path}", {"path": str(path), "updated": [], "sent": False})
+        return Shown(2, f"brief 是空的，沒有寫入：{tilde(path)}", {"path": str(path), "updated": [], "sent": False})
     if len(text) > _LIMIT:
         return Shown(2, f"brief 超過 {_LIMIT} 字，沒有寫入。", {"path": str(path), "updated": [], "sent": False})
     drafts: list[str] = []
@@ -190,7 +192,7 @@ def run_push(
     failures: list[str] = []
     focus = _focus(seats, grok_seat)
     for seat in seats:
-        if _is_grok(seat) and seat is not focus:
+        if is_grok(seat) and seat is not focus:
             continue
         target = _target_for(seat, grok_bot)
         if not seat.supports("instructions"):

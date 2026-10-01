@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 
+UNKNOWN_SEAT_HINT = "座位是 dot、grok、muse，或 `trinity-cli grok add` 加的名字；`trinity-cli grok bots` 列出可用的 bot。"
+
+
+def is_grok(seat) -> bool:
+    """Seat names are free-form (`grok add researcher`), so the seat class decides."""
+    return getattr(seat, "family", "") == "grok"
+
+
 def grok_seats(seats) -> list:
-    return [seat for seat in seats if seat.key == "grok" or str(seat.key).startswith("grok-")]
+    return [seat for seat in seats if is_grok(seat)]
 
 
 def default_grok(seats):

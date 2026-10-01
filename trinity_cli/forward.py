@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 
 from trinity_cli.app import ask_exit, ask_json, ask_one, call, render_ask
-from trinity_cli.targets import find_seat
+from trinity_cli.targets import UNKNOWN_SEAT_HINT, find_seat
 from trinity_cli.model import OK, UNSUPPORTED, Batch, Message, ReadOutcome, Result
 from trinity_cli.redact import scrub
 from trinity_cli.shown import Shown
@@ -36,7 +36,7 @@ class AnnotatingLedger:
 def parse_spec(text: str) -> tuple[str, str | None, str | None]:
     match = _SPEC.match(text.strip())
     if not match:
-        raise ValueError(f"看不懂 `{text}`（用 dot、grok:蝴蝶 或 grok:蝴蝶#last）")
+        raise ValueError(f"看不懂 `{text}`（用 dot、grok:研究員 或 grok:研究員#last）")
     return match.group("seat"), match.group("target"), match.group("sel")
 
 
@@ -132,7 +132,7 @@ def run_hand(
     target_seat = _find(seats, dest_key)
     if origin is None or target_seat is None:
         missing = source_key if origin is None else dest_key
-        return Shown(2, f"沒有 {missing} 這個座位。", {"sent": False, "error": "unknown seat"})
+        return Shown(2, f"沒有 {missing} 這個座位。{UNKNOWN_SEAT_HINT}", {"sent": False, "error": "unknown seat"})
     messages, problem = _window(origin, source_target)
     if problem is not None:
         state = "unsupported" if problem.state == UNSUPPORTED else "failed"
@@ -333,7 +333,7 @@ def run_wait(
         return Shown(2, str(exc), {"state": "error", "error": str(exc)})
     seat = _find(seats, seat_key)
     if seat is None:
-        return Shown(2, f"沒有 {seat_key} 這個座位。", {"state": "error", "error": "unknown seat"})
+        return Shown(2, f"沒有 {seat_key} 這個座位。{UNKNOWN_SEAT_HINT}", {"state": "error", "error": "unknown seat"})
     if target is None:
         target = getattr(seat, "default_bot", None) or None
     if not seat.supports("read"):

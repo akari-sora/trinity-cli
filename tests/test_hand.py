@@ -43,10 +43,10 @@ class HandTests(unittest.TestCase):
         return code, out.getvalue(), err.getvalue()
 
     def test_confirmation_is_required_without_yes(self):
-        dest = FakeSeat("grok", "Grok Bot", send=Result.ok(SendReceipt("Grok Bot/蝴蝶", "蝴蝶", "n", datetime.now(timezone.utc), "accepted")))
+        dest = FakeSeat("grok", "Grok Bot", send=Result.ok(SendReceipt("Grok Bot/研究員", "研究員", "n", datetime.now(timezone.utc), "accepted")))
         code, text, _ = self.invoke(
             [FakeSeat("dot", "Your dot", read=messages(agent("來源回覆"))), dest, unsupported_muse()],
-            "hand", "dot#last", "--to", "grok:蝴蝶", "請看這則",
+            "hand", "dot#last", "--to", "grok:研究員", "請看這則",
         )
         self.assertEqual(code, 2)
         self.assertEqual(dest.send_calls, 0)
@@ -64,9 +64,9 @@ class HandTests(unittest.TestCase):
         def send(target, text, nonce):
             captured.append(text)
             seen.extend(self.ledger.records())
-            return Result.ok(SendReceipt("Grok Bot/蝴蝶", "蝴蝶", nonce, datetime.now(timezone.utc), "accepted"))
+            return Result.ok(SendReceipt("Grok Bot/研究員", "研究員", nonce, datetime.now(timezone.utc), "accepted"))
 
-        reply = Message("Grok Bot/蝴蝶", "蝴蝶", "收到", datetime.now(timezone.utc), True, "r1")
+        reply = Message("Grok Bot/研究員", "研究員", "收到", datetime.now(timezone.utc), True, "r1")
         dest = FakeSeat(
             "grok",
             "Grok Bot",
@@ -75,7 +75,7 @@ class HandTests(unittest.TestCase):
         )
         code, text, _ = self.invoke(
             [FakeSeat("dot", "Your dot", read=messages(agent("來源回覆"))), dest],
-            "hand", "dot#last", "--to", "grok:蝴蝶", "--yes", "請看這則",
+            "hand", "dot#last", "--to", "grok:研究員", "--yes", "請看這則",
         )
         self.assertEqual(code, 0)
         self.assertEqual(dest.send_calls, 1)
@@ -96,7 +96,7 @@ class HandTests(unittest.TestCase):
         dest = FakeSeat(
             "grok",
             "Grok Bot",
-            send=Result.ok(SendReceipt("Grok Bot/蝴蝶", "蝴蝶", "n", datetime.now(timezone.utc), "accepted")),
+            send=Result.ok(SendReceipt("Grok Bot/研究員", "研究員", "n", datetime.now(timezone.utc), "accepted")),
             wait=Result.ok(WaitOutcome(True, None, True, 2)),
         )
         code, text, _ = self.invoke(
@@ -126,7 +126,7 @@ class HandTests(unittest.TestCase):
         clock = Clock()
         dot = DotSeat(FakeRunner(dot_world), binary="chatgpt-dot-cli", hostnames=set(), clock=clock, sleep=clock.sleep)
         grok = GrokSeat(FakeRunner(grok_world), binary="/fake/bin/gbot", only_bots=[], clock=clock, sleep=clock.sleep)
-        code, text, _ = self.invoke([dot, grok, unsupported_muse()], "hand", "dot#last", "--to", "grok:蝴蝶", "--yes", "--timeout", "0", "請處理")
+        code, text, _ = self.invoke([dot, grok, unsupported_muse()], "hand", "dot#last", "--to", "grok:研究員", "--yes", "--timeout", "0", "請處理")
         self.assertEqual(code, 1)
         self.assertEqual(len(grok_world.sent), 1)
         self.assertEqual(dot.runner.commands().count("send"), 0)
@@ -146,7 +146,7 @@ class HandTests(unittest.TestCase):
 
         def send(target, text, nonce):
             captured.append(text)
-            return Result.ok(SendReceipt("Grok", "蝴蝶", nonce, datetime.now(timezone.utc), "accepted"))
+            return Result.ok(SendReceipt("Grok", "研究員", nonce, datetime.now(timezone.utc), "accepted"))
 
         dest = FakeSeat("grok", "Grok Bot", send=send, wait=Result.ok(WaitOutcome(False, None, True, 1)))
         self.invoke([FakeSeat("dot", "Your dot", read=messages(older, newer)), dest], "hand", "dot#2", "--to", "grok", "--yes", "--timeout", "0", "看舊的")

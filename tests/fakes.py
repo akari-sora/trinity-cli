@@ -81,7 +81,8 @@ class BrokenOut(io.StringIO):
 
 
 class FakeSeat(Seat):
-    def __init__(self, key="fake", label="Fake", status=None, read=None, send=None, wait=None):
+    def __init__(self, key="fake", label="Fake", status=None, read=None, send=None, wait=None, family=None):
+        self.family = family or ("grok" if key == "grok" or key.startswith("grok-") else key)
         self.key = key
         self.label = label
         self._status = status
@@ -160,14 +161,14 @@ def usage_payload(used: int = 20, reached: bool = False) -> dict:
     }
 
 
-def computers_payload(this_mac: str = "MacBook-Pro-5.local", attached: bool = True) -> dict:
+def computers_payload(this_mac: str = "Example-Mac.local", attached: bool = True) -> dict:
     return {
         "status": 200,
         "body": {
             "computers": [
                 {"display_name": "dot", "kind": "openai_cloud", "is_attached": True},
                 {"display_name": this_mac, "kind": "user", "is_attached": attached},
-                {"display_name": "win_desktop", "kind": "user", "is_attached": False},
+                {"display_name": "example-pc", "kind": "user", "is_attached": False},
             ],
             "local_computer_access_disabled_by_admin": False,
         },
@@ -255,7 +256,7 @@ class GrokWorld:
         supports_instructions: bool = False,
         supports_schedules: bool = False,
     ):
-        self.bots = bots or [{"id": BOT_ID, "name": "蝴蝶", "kind": "bot"}]
+        self.bots = bots or [{"id": BOT_ID, "name": "研究員", "kind": "bot"}]
         self.transcripts = transcripts if transcripts is not None else {BOT_ID: []}
         self.supports_after = supports_after
         self.supports_account = supports_account

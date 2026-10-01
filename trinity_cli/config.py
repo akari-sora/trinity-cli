@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from trinity_cli.state import home
+from trinity_cli.util import decode_text
 
 _MAX_ACCOUNT = 64
 
@@ -59,8 +60,8 @@ def _config() -> dict:
 
 def read_config(path) -> dict:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        data = json.loads(decode_text(path.read_bytes()))
+    except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
 

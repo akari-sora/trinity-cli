@@ -26,7 +26,7 @@ def run(seats, *argv):
 
 
 def dot_seat(world):
-    return DotSeat(FakeRunner(world), binary="chatgpt-dot-cli", hostnames={"macbook-pro-5"})
+    return DotSeat(FakeRunner(world), binary="chatgpt-dot-cli", hostnames={"example-mac"})
 
 
 def grok_seat(world):
@@ -144,7 +144,8 @@ class GrokStatusTests(unittest.TestCase):
         self.assertEqual(result.state, "failed")
         self.assertIn("多個 gateway 登入", result.error)
         self.assertIn("Grok Bot app", result.hint)
-        self.assertIn("gbot doctor", result.hint)
+        self.assertIn("trinity-cli grok bots", result.hint)
+        self.assertIn("trinity-cli grok add", result.hint)
 
     def test_missing_gbot_is_a_failure(self):
         result = GrokSeat(FakeRunner(GrokWorld()), binary="").status()
@@ -156,9 +157,9 @@ class GrokStatusTests(unittest.TestCase):
                                                 grok_entry("e2", "assistant", "done", "2026-10-01T02:00:00Z")]})
         result = grok_seat(world).status()
         self.assertEqual(result.state, "ok")
-        self.assertIn("蝴蝶 最後訊息", result.value.summary)
+        self.assertIn("研究員 最後訊息", result.value.summary)
         self.assertIn("（bot）", result.value.summary)
-        self.assertTrue(any("蝴蝶 最後一句是 bot 說的" in w for w in result.value.waiting))
+        self.assertTrue(any("研究員 最後一句是 bot 說的" in w for w in result.value.waiting))
 
     def test_real_seats_side_by_side_never_print_ids(self):
         dot = dot_seat(DotWorld(messages=[dot_message(1, "dot", "ok", "2026-10-01T02:00:00Z")]))

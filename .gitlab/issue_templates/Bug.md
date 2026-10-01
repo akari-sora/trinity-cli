@@ -1,0 +1,25 @@
+<!-- Replace tokens, cookies, credential file contents, account, chat, or bot ids, and message text with placeholders before you paste anything. Security problems: see SECURITY.md instead. -->
+<!-- 貼上任何內容前，把 token、cookie、憑證、id、訊息內容換成假值。安全問題請看 SECURITY.md。 -->
+
+## What happened
+
+## What you expected
+
+## Steps to reproduce
+
+1.
+
+## Environment
+
+- `trinity-cli --version`:
+- OS and version:
+- Python version (`python --version`):
+- Seat tool versions (`chatgpt-dot-cli --version`, `gbot --version`, `muse-web-cli --version`):
+
+## Output
+
+```text
+(the command you ran and its output, with secrets replaced)
+```
+
+/label ~bug

@@ -69,6 +69,7 @@ def _duration(seconds: object) -> str:
 
 
 class DotSeat(Seat):
+    family = "dot"
     key = "dot"
     label = "Your dot"
 

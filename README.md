@@ -1,6 +1,8 @@
 # trinity-cli
 
 [![pipeline](https://gitlab.com/aa22396584/trinity-cli/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/trinity-cli/-/pipelines)
+[![release](https://gitlab.com/aa22396584/trinity-cli/-/badges/release.svg)](https://gitlab.com/aa22396584/trinity-cli/-/releases)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [中文](#中文) · [English](#english)
 
@@ -16,7 +18,9 @@
 
 它不讀 `~/.codex/auth.json`、Grok Bot app 的登入，或 Muse 的 cookie。`login` 只轉給那些工具既有的公開指令，不印憑證。唯一會存下 token 的是 `login muse`：它叫 `muse-web-cli credential` 把 Muse gateway token 只寫進 `~/.trinity-cli/muse-credential`（mode 600），給 `--muse-backend api` 用。trinity 自己不讀、不印這個檔。
 
-支援的系統：Linux（CI）、Windows（CI）、macOS（本機與實機檢查）。CI 預設使用 GitLab.com 的 runner。維護者可設定 CI/CD 變數 `LINUX_RUNNER_TAG` 與 `WINDOWS_RUNNER_TAG`，把 job 指到自己的 runner。
+非官方：這是個人專案，跟 OpenAI、xAI、Cursor（Anysphere）、Meta 都沒有關係，也沒有得到它們的背書或支援。它透過三個座位工具使用你自己的帳號，那些工具走的是沒有公開文件的介面，隨時可能改變或失效。自動化使用可能違反各服務的使用條款，帳號風險自負。
+
+支援的系統見[平台](#平台)。
 
 ### 三個座位
 
@@ -73,7 +77,7 @@ muse-web-cli --version
 trinity-cli --version
 ```
 
-Windows 上 npm 的 `gbot` 是 `gbot.cmd`，uv 的工具是 `.exe`。trinity 用 `shutil.which` 找它們，參數以清單傳遞，不用 shell。Windows 也要 Node.js 22.19.0+。
+Windows 上 npm 的 `gbot` 是 `gbot.cmd`，uv 的工具是 `.exe`。trinity 用 `shutil.which` 找它們。`gbot.cmd` 這種 npm 包裝檔，trinity 直接用 node 跑它指向的腳本，參數不經過 cmd.exe。其他 `.cmd`／`.bat` 會經過 cmd.exe，每個參數加引號；含 `"`、`%` 或換行的參數會被拒絕。Windows 也要 Node.js 22.19.0+。
 
 升級到同一個釘選：把安裝指令再跑一次。`uv` 加 `--force`。gbot 再下載同一個 `.tgz` 後安裝。
 
@@ -91,16 +95,16 @@ npm uninstall -g grok-bot-cli
 ### 第一次設定
 
 1. Your dot：`codex login`。401 時再跑一次。也可以 `trinity-cli login dot`。多個 dot 時設 `TRINITY_DOT_ID`。細節見 [chatgpt-dot-cli 疑難排解](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#疑難排解)。
-2. Grok Bot：打開 Grok Bot app 登入。`trinity-cli login grok` 只會重複這句，不會讀那個登入。有多個登入時先跑 `gbot accounts`，把要的標籤寫進設定。細節見 [grok-bot-cli 安裝](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install)。
+2. Grok Bot：打開 Grok Bot app 登入，並在 app 裡建立至少一個 bot。`trinity-cli login grok` 只會重複這句，不會讀那個登入。接著跑 `trinity-cli grok bots`，看每個登入標籤上有哪些 bot，再挑一個存成座位：`trinity-cli grok add researcher --account 登入標籤 --bot "bot 名稱" --default`。只有一個登入和一個 bot 時，不加座位也能用 `grok`。細節見 [grok-bot-cli 安裝](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install)。
 3. Muse 預設走網頁（browser 後端）：`muse-web-cli login`（看得到的視窗），完成後 `muse-web-cli start --headless`。或 `trinity-cli login muse --web`。api 後端（`--muse-backend api`，走 Muse gateway）要憑證：`trinity-cli login muse` 會執行 `muse-web-cli credential`，沒登入就先走登入，再把 gateway token 只寫進 `~/.trinity-cli/muse-credential`（mode 600），不印出。這個檔是 token，不要分享或提交。token 過期時會說「登入工作階段已失效」，在 Chrome 重新登入後再跑一次。`--api-key` 仍把金鑰從標準輸入交給 `muse auth set --api-key-stdin`。細節見 [muse-web-cli 排解](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#排解)。
 4. 多個 Grok 座位用登入標籤加 bot 名稱。`grok` 指向 `grok_default`。假值：
 
 ```json
 {
-  "grok_default": "grok-a",
+  "grok_default": "researcher",
   "grok_seats": [
-    {"name": "grok-a", "account": "example-login-a", "bot": "Grok Bot"},
-    {"name": "grok-b", "account": "example-login-b", "bot": "Main"}
+    {"name": "researcher", "account": "example-login-a", "bot": "Researcher"},
+    {"name": "writer", "account": "example-login-b", "bot": "Writer"}
   ]
 }
 ```
@@ -285,9 +289,9 @@ trinity-cli login muse --web
 
 ```bash
 trinity-cli grok bots
-trinity-cli grok add grok-a --account example-login-a --bot "Grok Bot" --default
-trinity-cli grok remove grok-b
-trinity-cli ask grok-a "一句話"
+trinity-cli grok add researcher --account example-login-a --bot "Researcher" --default
+trinity-cli grok remove writer
+trinity-cli ask researcher "一句話"
 trinity-cli ask grok --bot "Other" --account example-login-a "臨時問這個"
 trinity-cli ask all "問全部"
 ```
@@ -298,7 +302,7 @@ trinity-cli ask all "問全部"
 
 三個座位的能力不一樣。沒有的能力會明白寫「不支援」，結束碼仍是 0，不會連帶讓別的座位失敗。`muse-web-cli` 的預設是 browser；`api` 走 Muse gateway，讀 `~/.trinity-cli/muse-credential`。trinity 會傳 `--backend`：`--muse-backend` 優先於設定檔的 `muse_backend`，再來是 `MUSE_WEB_BACKEND`。三個都沒寫就不傳，交給 muse-web-cli 自己的預設。值是 `browser`、`api` 或 `auto`。`auto` 先試 api，該能力若是 exit 4 才改走 browser，並標出實際用的後端。`send` 逾時不會改走另一個後端。api 有能力不支援且沒有 fallback 時，那個能力單獨標不支援，不會讓 trinity 當掉。Muse 沒有指令 API。Grok 群組只在 `ask grok <群組>` 和 `hand`／`wait` 的 `grok:<名字>` 可用；`status` 和 `digest` 只看 bot。
 
-讀取位置在 `state.json` 的 `cursors`，Grok 依座位分開（例如 `grok-a.messages`）。只有 `digest` 把輸出印完才前進。`--peek`、`--since`、`hand`、`wait` 都不動。對不上上次的結尾時標「可能漏看」。一個 Grok 座位不可達時，其他座位照常；那個座位標成失敗，並附上重新登入的提示。
+讀取位置在 `state.json` 的 `cursors`，Grok 依座位分開（例如 `researcher.messages`）。只有 `digest` 把輸出印完才前進。`--peek`、`--since`、`hand`、`wait` 都不動。對不上上次的結尾時標「可能漏看」。一個 Grok 座位不可達時，其他座位照常；那個座位標成失敗，並附上重新登入的提示。
 
 每次 `ask` 和 `hand` 在送出前就寫 `ledger.jsonl`。你的原文後面空一行，加一行 `[trinity abc123]`。讀回在你自己的訊息裡找這個標籤。逾時只報告，不重送。
 
@@ -317,7 +321,7 @@ Muse 在讀和送之前先看 `chats`。目前是副聊天室時不送出，也�
 | Your dot 401 或登入檔不能用 | `codex login`。見 [chatgpt-dot-cli 疑難排解](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#疑難排解) |
 | Your dot 網路或非 200 | 先看 `chatgpt-dot-cli list` |
 | 找不到 chatgpt-dot-cli | 安裝，或設 `TRINITY_DOT_CLI` |
-| Grok 多個登入 | `gbot accounts`，再寫 `gbot_account`。見 [grok-bot-cli 安裝](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install) |
+| Grok 多個登入或多個 bot | `trinity-cli grok bots`，再 `trinity-cli grok add NAME --account LABEL --bot BOT --default`。見 [grok-bot-cli 安裝](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install) |
 | Grok 登入不能用 | 打開 Grok Bot app，跑 `gbot doctor` |
 | 找不到 gbot | 安裝，或設 `TRINITY_GBOT` |
 | Muse 瀏覽器沒起來 | `muse-web-cli start --headless` |
@@ -357,6 +361,27 @@ Muse 在讀和送之前先看 `chats`。目前是副聊天室時不送出，也�
 
 trinity 不會叫 agent 刪檔、傳訊息給別人、購買，或改設定與帳號。`brief push` 只在你確認後寫入 Grok 的指令。`hand` 和 `brief push` 先問；不是終端機時沒有 `--yes` 就不送。`hand` 不會把對方的回覆再轉出去。逾時不重送。真正送出的那幾次會在畫面上標成送出，並寫進 ledger。
 
+### 隱私
+
+- trinity 沒有遙測，自己不連網路。網路請求都是三個座位工具發出的，各自送到自己的服務。
+- 資料只存在本機的 `TRINITY_HOME`。`ledger.jsonl` 記時間、座位、bot 名稱、nonce 和結果，不存訊息內文。`state.json` 只有讀取位置。
+- 文字輸出把家目錄寫成 `~`，`--json` 保留完整路徑。
+- `grok bots` 和 `log` 不印 id；印出的錯誤會先清掉 token、cookie 這類欄位值。貼輸出到 issue 前，還是先看一下有沒有訊息內容或名字。
+
+### 平台
+
+| 系統 | Python | 驗證方式 |
+| --- | --- | --- |
+| Linux | 3.11、3.12 | GitLab CI：完整離線測試；`contract:muse` 在暫時的家目錄跑 README 釘的 muse-web-cli |
+| Windows | 3.12 | GitLab CI：同一套離線測試，改到程式、測試或相依時自動跑 |
+| macOS | 3.11、3.12、3.13 | 維護者本機：同一套離線測試，加上照這份 README 從 tag 安裝的首次使用檢查 |
+
+測試用假的座位工具，不連任何服務。三個座位工具各自的平台表在它們的 README。CI 預設使用 GitLab.com 的 runner。維護者可設定 CI/CD 變數 `LINUX_RUNNER_TAG` 與 `WINDOWS_RUNNER_TAG`，把 job 指到自己的 runner。
+
+### 參與開發
+
+見 [CONTRIBUTING.md](CONTRIBUTING.md)。安全問題照 [SECURITY.md](SECURITY.md) 回報，不要開公開 issue。
+
 ### 疑難排解
 
 - `gbot` 有多個登入、選不出來：跑 `trinity-cli grok bots`，再用 `grok add`。旗標放在子命令後面。
@@ -382,7 +407,9 @@ skill 在 `skills/trinity-cli/SKILL.md`。目錄已經存在時再連過去，�
 
 It does not read `~/.codex/auth.json`, the Grok Bot app session, or Muse cookies. `login` only hands off to those public CLIs and does not print a credential. The one login that stores a token is `login muse`: it has `muse-web-cli credential` write the Muse gateway token only to `~/.trinity-cli/muse-credential` (mode 600) for `--muse-backend api`. trinity itself never reads or prints that file.
 
-Supported systems: Linux (CI), Windows (CI), and macOS (local use and live checks). CI uses GitLab.com runners by default. Maintainers can point jobs at their own runners by setting the CI/CD variables `LINUX_RUNNER_TAG` and `WINDOWS_RUNNER_TAG`.
+Unofficial: this is a personal project, not affiliated with, endorsed by, or supported by OpenAI, xAI, Cursor (Anysphere), or Meta. It uses your own accounts through the three seat tools, which rely on undocumented interfaces that can change or break at any time. Automated use may break a service's terms; any account risk is yours.
+
+Supported systems: see [Platforms](#platforms).
 
 ### The three seats
 
@@ -439,7 +466,7 @@ muse-web-cli --version
 trinity-cli --version
 ```
 
-On Windows, npm's `gbot` is `gbot.cmd` and uv tools are `.exe`. trinity finds them with `shutil.which` and passes arguments as a list, never through a shell. Windows also needs Node.js 22.19.0+.
+On Windows, npm's `gbot` is `gbot.cmd` and uv tools are `.exe`. trinity finds them with `shutil.which`. For an npm wrapper such as `gbot.cmd`, trinity runs node on the script it points to, so cmd.exe never sees the arguments. Any other `.cmd` or `.bat` goes through cmd.exe with every argument quoted, and an argument containing `"`, `%`, or a line break is refused. Windows also needs Node.js 22.19.0+.
 
 Upgrade to the same pin by running the install again. Add `--force` for `uv`. For gbot, download the same `.tgz` and install it again.
 
@@ -457,16 +484,16 @@ npm uninstall -g grok-bot-cli
 ### First-time setup
 
 1. Your dot: `codex login`. Run it again on a 401. `trinity-cli login dot` does the same. Set `TRINITY_DOT_ID` when the account has more than one dot. See the [chatgpt-dot-cli troubleshooting](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#troubleshooting) section.
-2. Grok Bot: sign in with the Grok Bot app. `trinity-cli login grok` only repeats that; it does not read the session. When several logins exist, run `gbot accounts` and save the label. See the [grok-bot-cli install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install) section.
+2. Grok Bot: sign in with the Grok Bot app and create at least one bot there. `trinity-cli login grok` only repeats that; it does not read the session. Then run `trinity-cli grok bots` to see the bots on each login label, and save one as a seat: `trinity-cli grok add researcher --account LABEL --bot "BOT NAME" --default`. With one login and one bot, `grok` works without a saved seat. See the [grok-bot-cli install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install) section.
 3. Muse defaults to the browser backend: `muse-web-cli login` in a visible window, then `muse-web-cli start --headless`. Or `trinity-cli login muse --web`. The api backend (`--muse-backend api`, the Muse gateway) needs a credential: `trinity-cli login muse` runs `muse-web-cli credential`, which logs in when needed and writes the gateway token only to `~/.trinity-cli/muse-credential` (mode 600), never printing it. That file is a token; do not share or commit it. An expired token is reported as 登入工作階段已失效 ("login session expired"); sign in again in Chrome and rerun. `--api-key` still passes a key from stdin to `muse auth set --api-key-stdin`. See the [muse-web-cli troubleshooting](https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/README.md#troubleshooting) section.
 4. Several Grok seats are keyed by login label plus bot name. `grok` means `grok_default`. Fake values:
 
 ```json
 {
-  "grok_default": "grok-a",
+  "grok_default": "researcher",
   "grok_seats": [
-    {"name": "grok-a", "account": "example-login-a", "bot": "Grok Bot"},
-    {"name": "grok-b", "account": "example-login-b", "bot": "Main"}
+    {"name": "researcher", "account": "example-login-a", "bot": "Researcher"},
+    {"name": "writer", "account": "example-login-b", "bot": "Writer"}
   ]
 }
 ```
@@ -651,9 +678,9 @@ trinity-cli login muse --web
 
 ```bash
 trinity-cli grok bots
-trinity-cli grok add grok-a --account example-login-a --bot "Grok Bot" --default
-trinity-cli grok remove grok-b
-trinity-cli ask grok-a "one sentence"
+trinity-cli grok add researcher --account example-login-a --bot "Researcher" --default
+trinity-cli grok remove writer
+trinity-cli ask researcher "one sentence"
 trinity-cli ask grok --bot "Other" --account example-login-a "ask this one without saving a seat"
 trinity-cli ask all "ask every seat"
 ```
@@ -664,7 +691,7 @@ trinity-cli ask all "ask every seat"
 
 The seats do not have the same capabilities. A missing one is reported as unsupported, still exit 0, and does not fail the others. `muse-web-cli` defaults to the browser backend; `api` is the Muse gateway and reads `~/.trinity-cli/muse-credential`. trinity passes `--backend`: `--muse-backend` wins over config `muse_backend`, which wins over `MUSE_WEB_BACKEND`. With none of those set, trinity omits `--backend` and muse-web-cli keeps its own default. The value is `browser`, `api`, or `auto`. `auto` tries api first and uses browser for a capability only when that call exits 4, and the line names the backend that served it. A timed-out `send` is not tried on the other backend. An unsupported api capability with no fallback is reported on its own and trinity does not crash. Muse has no instruction API. Grok groups work with `ask grok <group>` and `grok:<name>` on `hand` / `wait`; `status` and `digest` cover bots only.
 
-Cursors live in `cursors` inside `state.json`, and each Grok seat has its own key (for example `grok-a.messages`). Only `digest` moves them, and only after the output was printed. `--peek`, `--since`, `hand`, and `wait` do not. When the previous tail is gone, the timeline says 可能漏看 ("possibly missed"). One unreachable Grok seat does not stop the others; that seat is a failure with the re-login hint.
+Cursors live in `cursors` inside `state.json`, and each Grok seat has its own key (for example `researcher.messages`). Only `digest` moves them, and only after the output was printed. `--peek`, `--since`, `hand`, and `wait` do not. When the previous tail is gone, the timeline says 可能漏看 ("possibly missed"). One unreachable Grok seat does not stop the others; that seat is a failure with the re-login hint.
 
 Every `ask` and `hand` writes `ledger.jsonl` before the send. Your text is unchanged, then a blank line and `[trinity abc123]`. Readback looks for that tag in your own messages. A timeout is reported and never resent.
 
@@ -683,7 +710,7 @@ Before a Muse read or send, trinity calls `chats`. A side chat is not sent into 
 | Your dot 401 or unusable login | `codex login`. See [chatgpt-dot-cli troubleshooting](https://gitlab.com/aa22396584/chatgpt-dot-cli/-/blob/main/README.md#troubleshooting) |
 | Your dot network or non-200 | Try `chatgpt-dot-cli list` |
 | chatgpt-dot-cli missing | Install it, or set `TRINITY_DOT_CLI` |
-| Several Grok logins | `gbot accounts`, then set `gbot_account`. See the [grok-bot-cli install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install) section. |
+| Several Grok logins or bots | `trinity-cli grok bots`, then `trinity-cli grok add NAME --account LABEL --bot BOT --default`. See the [grok-bot-cli install](https://gitlab.com/aa22396584/grok-bot-cli/-/blob/main/FORK.md#install) section. |
 | Grok login unusable | Open the Grok Bot app and run `gbot doctor` |
 | gbot missing | Install it, or set `TRINITY_GBOT` |
 | Muse browser down | `muse-web-cli start --headless` |
@@ -723,6 +750,27 @@ Data lives in `TRINITY_HOME`, or `.trinity-cli` under the home directory when th
 
 trinity does not ask an agent to delete files, message anyone, buy anything, or change settings or accounts. `brief push` writes a Grok bot's instructions only after you confirm. `hand` and `brief push` ask first; without a terminal they send nothing unless you pass `--yes`. `hand` does not forward the destination's reply onward. A timeout is never resent. Live sends are labeled as sends and written to the ledger.
 
+### Privacy
+
+- trinity has no telemetry and makes no network requests of its own. The three seat tools make the requests, each to its own service.
+- Data stays on your machine in `TRINITY_HOME`. `ledger.jsonl` records times, seats, bot names, nonces, and outcomes, not message text. `state.json` holds cursors only.
+- Text output shows your home directory as `~`; `--json` keeps full paths.
+- `grok bots` and `log` print no ids, and printed errors have token and cookie values removed. Still check output for message text or names before pasting it into an issue.
+
+### Platforms
+
+| OS | Python | How it was checked |
+| --- | --- | --- |
+| Linux | 3.11, 3.12 | GitLab CI: the full offline suite; `contract:muse` runs the README-pinned muse-web-cli in a temporary home |
+| Windows | 3.12 | GitLab CI: the same offline suite, run automatically when code, tests, or dependencies change |
+| macOS | 3.11, 3.12, 3.13 | Maintainer machine: the same offline suite, plus a first-run check that installs from the tags as this README says |
+
+The tests use fake seat tools and contact no service. Each seat tool has its own platform table in its README. CI uses GitLab.com runners by default. Maintainers can point jobs at their own runners by setting the CI/CD variables `LINUX_RUNNER_TAG` and `WINDOWS_RUNNER_TAG`.
+
+### Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems as described in [SECURITY.md](SECURITY.md), not in a public issue.
+
 ### Troubleshooting
 
 - gbot has several logins and cannot choose: run `trinity-cli grok bots`, then `grok add`. The flag goes after the subcommand.
@@ -738,4 +786,4 @@ The skill is `skills/trinity-cli/SKILL.md`. Link it only when the directory alre
 
 ## License
 
-MIT
+[MIT](LICENSE)

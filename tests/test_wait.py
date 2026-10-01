@@ -105,12 +105,12 @@ class WaitTests(unittest.TestCase):
         dest = FakeSeat(
             "grok",
             "Grok Bot",
-            send=Result.ok(SendReceipt("Grok Bot/蝴蝶", "蝴蝶", "n", datetime.now(timezone.utc), "accepted")),
+            send=Result.ok(SendReceipt("Grok Bot/研究員", "研究員", "n", datetime.now(timezone.utc), "accepted")),
             wait=Result.ok(__import__("trinity_cli.model", fromlist=["WaitOutcome"]).WaitOutcome(True, None, True, 1)),
         )
         code, text, _ = self.invoke(
             [origin, dest],
-            "wait", "dot", "--timeout", "5", "--then", "hand", "dot#last", "--to", "grok:蝴蝶", "接著做",
+            "wait", "dot", "--timeout", "5", "--then", "hand", "dot#last", "--to", "grok:研究員", "接著做",
         )
         self.assertEqual(code, 2)
         self.assertEqual(dest.send_calls, 0)
@@ -121,7 +121,7 @@ class WaitTests(unittest.TestCase):
         )
         code, text, _ = self.invoke(
             [origin, dest],
-            "wait", "dot", "--timeout", "5", "--then", "hand", "dot#last", "--to", "grok:蝴蝶", "--yes", "--timeout", "0", "接著做",
+            "wait", "dot", "--timeout", "5", "--then", "hand", "dot#last", "--to", "grok:研究員", "--yes", "--timeout", "0", "接著做",
         )
         self.assertEqual(dest.send_calls, 1)
         self.assertIn("已轉交", text)

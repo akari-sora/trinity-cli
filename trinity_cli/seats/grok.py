@@ -46,9 +46,8 @@ GBOT_FALLBACKS = (
 FIX_APP = "打開 Grok Bot app 確認已登入，再跑 `gbot doctor`"
 FIX_INSTALL = "安裝 gbot（見 README）或設定 TRINITY_GBOT"
 FIX_AMBIGUOUS = (
-    "設定 TRINITY_GBOT_ACCOUNT（或 ~/.trinity-cli/config.json 的 gbot_account）。"
-    "trinity 會在 gbot thread 的說明裡看到 --account 時帶上它，也會設 GBOT_ACCOUNT。"
-    "打開 Grok Bot app 確認登入，用 `gbot accounts` 看標籤，再跑 `gbot doctor`"
+    "打開 Grok Bot app 確認登入，用 `trinity-cli grok bots` 看每個登入標籤上的 bot，"
+    "再用 `trinity-cli grok add NAME --account LABEL --bot BOT --default` 指定要用哪一個"
 )
 SANDBOX_GONE = "unreachable: sandbox gone — re-login this account in the Grok Bot app"
 FIX_RELOGIN = "在 Grok Bot app 重新登入這個帳號。gbot 沒有重新登入的指令。"
@@ -180,6 +179,7 @@ def transcript_delta(messages: list[Message], cursor: dict | None) -> tuple[list
 
 
 class GrokSeat(Seat):
+    family = "grok"
     key = "grok"
     label = "Grok Bot"
 

@@ -28,10 +28,10 @@ class AccountTests(unittest.TestCase):
         from tests.fakes import ok
 
         world = GrokWorld(supports_account=True)
-        world.send_result = ok({"name": "蝴蝶", "id": BOT_ID, "delivery": "unknown", "exitCode": 0})
+        world.send_result = ok({"name": "研究員", "id": BOT_ID, "delivery": "unknown", "exitCode": 0})
         runner = FakeRunner(world)
         seat = GrokSeat(runner, binary="/fake/bin/gbot", only_bots=[], account="work")
-        result = seat.send("蝴蝶", "hi", "abc123")
+        result = seat.send("研究員", "hi", "abc123")
         self.assertEqual(result.state, "ok")
         self.assertEqual(result.value.delivery, "unknown")
         self.assertEqual(len(world.sent), 1)
@@ -81,12 +81,12 @@ class AccountTests(unittest.TestCase):
         self.assertIsNone(clean_account("sk-proj1234567890abcdef"))
         self.assertEqual(clean_account("work"), "work")
         with tempfile.TemporaryDirectory() as tmp:
-            Path(tmp, "config.json").write_text('{"gbot_account": "desk"}', encoding="utf-8")
+            Path(tmp, "config.json").write_text('{"gbot_account": "example-desk"}', encoding="utf-8")
             old_account = os.environ.pop("TRINITY_GBOT_ACCOUNT", None)
             old_home = os.environ.get("TRINITY_HOME")
             os.environ["TRINITY_HOME"] = tmp
             try:
-                self.assertEqual(configured_gbot_account(), "desk")
+                self.assertEqual(configured_gbot_account(), "example-desk")
                 os.environ["TRINITY_GBOT_ACCOUNT"] = "env-name"
                 self.assertEqual(configured_gbot_account(), "env-name")
                 os.environ["TRINITY_GBOT_ACCOUNT"] = "eyJhbGciOiJIUzI1NiJ9.payload.signature"

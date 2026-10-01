@@ -59,7 +59,7 @@ FIX_TOKEN = (
 def credential_mode_fix() -> str:
     if os.name == "nt":
         return (
-            r'icacls "%USERPROFILE%\.trinity-cli\muse-credential" /inheritance:r /grant:r "%USERNAME%:R"'
+            r'icacls "$env:USERPROFILE\.trinity-cli\muse-credential" /inheritance:r /grant:r "${env:USERNAME}:R"'
         )
     return "chmod 600 ~/.trinity-cli/muse-credential"
 _TOKEN_OK = (
@@ -135,6 +135,7 @@ def _content_key(role: str, text: str, seen: dict[str, int]) -> str:
 
 
 class MuseSeat(Seat):
+    family = "muse"
     key = "muse"
     label = "Muse"
     unsupported_reason = "不支援"

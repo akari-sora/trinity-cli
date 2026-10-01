@@ -1,18 +1,21 @@
 """The only place trinity starts other programs.
 
 Arguments are always a list, never `shell=True`. On Windows, `shutil.which`
-returns npm shims such as `gbot.cmd`; those are started with `cmd.exe /d /s /c`
-so CreateProcess can run them. A timeout kills the child with `proc.kill()` on
-POSIX and `taskkill /T` on Windows. Output is decoded as UTF-8.
+returns npm shims such as `gbot.cmd`; trinity runs node on the script behind the
+shim, so cmd.exe never parses a message. Other batch files go through
+`cmd.exe /d /s /c` with every argument quoted. A timeout kills the child with
+`proc.kill()` on POSIX and `taskkill /T` on Windows. Output is decoded as UTF-8.
 """
 
 from __future__ import annotations
 
 import glob
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 
 # Browser approval and `codex login` wait on a person. Don't capture their output:
@@ -28,11 +31,50 @@ class Proc:
     timed_out: bool = False
 
 
-def command_argv(argv: list[str]) -> list[str]:
+# npm's cmd-shim ends with `"%_prog%" "%dp0%\node_modules\<pkg>\bin\<tool>.js" %*`.
+_NPM_SHIM_SCRIPT = re.compile(r'"%~?dp0%?\\([^"]+\.[cm]?js)"', re.IGNORECASE)
+# cmd.exe expands %VAR% and ends the line at a newline even inside quotes.
+_CMD_UNSAFE = ('"', "%", "\r", "\n")
+
+
+class UnsafeCommand(ValueError):
+    pass
+
+
+def npm_shim_target(shim: str) -> list[str] | None:
+    """node and the script behind an npm .cmd shim, so cmd.exe never parses the arguments."""
+    try:
+        text = Path(shim).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    match = _NPM_SHIM_SCRIPT.search(text)
+    if not match:
+        return None
+    base = Path(shim).parent
+    script = base.joinpath(*match.group(1).split("\\"))
+    if not script.is_file():
+        return None
+    local = base / "node.exe"
+    node = str(local) if local.is_file() else shutil.which("node")
+    return [node, str(script)] if node else None
+
+
+def _cmd_quote(arg: str) -> str:
+    # Backslashes before the closing quote are doubled so the child's argv parser keeps them.
+    return '"' + re.sub(r"(\\+)$", r"\1\1", arg) + '"'
+
+
+def command_argv(argv: list[str]) -> list[str] | str:
     """Keep Windows batch shims runnable without shell=True."""
     if os.name == "nt" and argv and argv[0].lower().endswith((".cmd", ".bat")):
+        direct = npm_shim_target(argv[0])
+        if direct:
+            return [*direct, *argv[1:]]
+        if any(ch in arg for arg in argv for ch in _CMD_UNSAFE):
+            raise UnsafeCommand(f"{os.path.basename(argv[0])} 是 .cmd 檔，cmd.exe 無法安全傳遞含引號、% 或換行的參數")
         comspec = os.environ.get("COMSPEC") or "cmd.exe"
-        return [comspec, "/d", "/s", "/c", *argv]
+        # /s strips only the outer pair of quotes, the same line Node builds for .cmd files.
+        return f'"{comspec}" /d /s /c "{" ".join(_cmd_quote(arg) for arg in argv)}"'
     return list(argv)
 
 
@@ -69,8 +111,12 @@ class Runner:
     ) -> Proc:
         name = os.path.basename(argv[0]) if argv else "command"
         try:
+            command = command_argv(argv)
+        except UnsafeCommand as exc:
+            return Proc(2, "", str(exc))
+        try:
             proc = subprocess.Popen(
-                command_argv(argv),
+                command,
                 stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -98,6 +144,8 @@ class Runner:
         """Run with the caller's terminal. stdout and stderr are not captured."""
         try:
             proc = subprocess.Popen(command_argv(argv), **_pop_kwargs())
+        except UnsafeCommand as exc:
+            return Proc(2, "", str(exc))
         except FileNotFoundError:
             return Proc(127, "", "")
         try:

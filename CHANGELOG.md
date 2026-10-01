@@ -49,7 +49,7 @@
 - `trinity-cli login muse` 執行公開的 `muse login`（瀏覽器核准）。`--api-key` 把標準輸入交給 `muse auth set --api-key-stdin`。`--web` 才是 `muse-web-cli login`。trinity 不讀、不印、不複製憑證，也不寫入 `~/.trinity-cli/muse-credential`。api 後端缺憑證時，status 改提示這條。
 - 用法說明改成中英完整對照：安裝、第一次設定、每個指令和旗標、`--json` 欄位、結束碼、檔案與安全界線。`--help` 每個指令和旗標都有預設值或範圍。
 - Windows 與 Linux：用 `shutil.which` 找工具（含 `gbot.cmd`），參數用清單、不用 shell；子程序輸出以 UTF-8 解碼；逾時在 Windows 用 `taskkill /T`。狀態、帳本、設定在 `TRINITY_HOME` 或家目錄的 `.trinity-cli`，寫入用 `os.replace`。
-- CI：Linux 仍走 grok-box；Windows 走 GitLab 代管的 `saas-windows-medium-amd64`（只跑離線測試）。標籤流水線會附上各系統安裝方式、相關專案連結，並上傳 wheel 與 sdist。
+- CI：Linux 走專案自己的 runner；Windows 走 GitLab 代管的 `saas-windows-medium-amd64`（只跑離線測試）。標籤流水線會附上各系統安裝方式、相關專案連結，並上傳 wheel 與 sdist。
 
 ## 0.3.2
 

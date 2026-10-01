@@ -28,6 +28,7 @@ class Problem(Exception):
 
 
 class Seat:
+    family = ""
     key = ""
     label = ""
     unsupported_reason = "不支援"
