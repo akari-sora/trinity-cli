@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 from pathlib import Path
 
 
@@ -51,40 +52,62 @@ class State:
             raise
 
 
+def _write_bytes(handle, payload: bytes) -> None:
+    handle.write(payload)
+
+
 class Ledger:
-    """Append-only record of every send: written before the send and after readback."""
+    """Append-only record of every send: written before the send and after readback.
+
+    Seats append from a thread pool. On Windows those writes are not atomic
+    across handles, so one lock covers the whole line.
+    """
+
+    _guard = threading.Lock()
+    _locks: dict[str, threading.Lock] = {}
 
     def __init__(self, path: Path | None = None):
         self.path = path or home() / "ledger.jsonl"
 
+    def _lock(self) -> threading.Lock:
+        key = os.path.normcase(str(self.path))
+        with Ledger._guard:
+            lock = Ledger._locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                Ledger._locks[key] = lock
+            return lock
+
     def append(self, record: dict) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        new = not self.path.exists()
-        # Binary UTF-8 with a single \n. json.dumps leaves U+2028/U+2029/U+0085
-        # raw, and str.splitlines() treats those as line breaks.
-        text = json.dumps(record, ensure_ascii=False)
-        for char, escaped in (("\u2028", "\\u2028"), ("\u2029", "\\u2029"), ("\u0085", "\\u0085")):
-            text = text.replace(char, escaped)
-        line = (text + "\n").encode("utf-8")
-        with open(self.path, "ab") as handle:
-            handle.write(line)
-            handle.flush()
-            os.fsync(handle.fileno())
-        if new:
-            os.chmod(self.path, 0o600)
+        with self._lock():
+            self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            new = not self.path.exists()
+            # Binary UTF-8 with a single \n. json.dumps leaves U+2028/U+2029/U+0085
+            # raw, and str.splitlines() treats those as line breaks.
+            text = json.dumps(record, ensure_ascii=False)
+            for char, escaped in (("\u2028", "\\u2028"), ("\u2029", "\\u2029"), ("\u0085", "\\u0085")):
+                text = text.replace(char, escaped)
+            line = (text + "\n").encode("utf-8")
+            with open(self.path, "ab") as handle:
+                _write_bytes(handle, line)
+                handle.flush()
+                os.fsync(handle.fileno())
+            if new:
+                os.chmod(self.path, 0o600)
 
     def records(self) -> list[dict]:
-        try:
-            raw = self.path.read_bytes()
-        except FileNotFoundError:
-            return []
-        rows = []
-        for line in raw.decode("utf-8").split("\n"):
-            line = line.rstrip("\r").strip()
-            if not line:
-                continue
+        with self._lock():
             try:
-                rows.append(json.loads(line))
-            except json.JSONDecodeError as exc:
-                raise json.JSONDecodeError(f"{exc.msg} line={line[:120]!r}", line, exc.pos) from None
-        return rows
+                raw = self.path.read_bytes()
+            except FileNotFoundError:
+                return []
+            rows = []
+            for line in raw.decode("utf-8").split("\n"):
+                line = line.rstrip("\r").strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError as exc:
+                    raise json.JSONDecodeError(f"{exc.msg} line={line[:120]!r}", line, exc.pos) from None
+            return rows

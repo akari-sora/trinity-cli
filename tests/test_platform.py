@@ -147,6 +147,35 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(book.records(), [{"at": "2026-10-01T00:00:00+00:00", "note": "a\u2028b\u2029c\u0085d蝴蝶"}])
         self.assertNotIn("\n", Path(tmp.name, "ledger.jsonl").read_bytes().decode("utf-8").split("\n")[0])
 
+    def test_concurrent_appends_stay_one_json_line(self):
+        import tempfile
+        import threading
+        import time
+        from pathlib import Path
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        book = Ledger(Path(tmp.name) / "ledger.jsonl")
+
+        def slow(handle, payload: bytes) -> None:
+            handle.write(payload[:1])
+            time.sleep(0.01)
+            handle.write(payload[1:])
+
+        def worker(index: int) -> None:
+            for n in range(8):
+                book.append({"id": f"{index}-{n}", "at": "2026-10-01T00:00:00+00:00"})
+
+        with mock.patch("trinity_cli.state._write_bytes", slow):
+            threads = [threading.Thread(target=worker, args=(index,)) for index in range(4)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        rows = book.records()
+        self.assertEqual(len(rows), 32)
+        self.assertEqual({row["id"] for row in rows}, {f"{i}-{n}" for i in range(4) for n in range(8)})
+
     def test_windows_stdio_is_reconfigured_to_utf8(self):
         stream = mock.Mock()
         with mock.patch("trinity_cli.cli.sys.platform", "win32"), mock.patch(

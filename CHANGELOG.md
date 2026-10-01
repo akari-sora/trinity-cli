@@ -3,6 +3,7 @@
 ## 0.3.3
 
 - 座位工具釘在 `chatgpt-dot-cli` v0.2.2、gbot fork v0.11.2-iml1s.2、`muse-web-cli` v0.1.2。
+- 平行寫入帳本時整行加鎖。Windows 上同時 append 不會把兩筆 JSON 寫成交錯的一行。
 - Muse 仍預設走 browser。backend 由 muse-web-cli 的 `--backend`、`MUSE_WEB_BACKEND` 或它自己的設定檔決定，trinity 不傳 `--backend`。使用者改成 api 且該能力不支援時，每個能力分開回報不支援，不會讓整支指令當掉。
 - `trinity-cli login muse` 執行公開的 `muse login`（瀏覽器核准）。`--api-key` 把標準輸入交給 `muse auth set --api-key-stdin`。`--web` 才是 `muse-web-cli login`。trinity 不讀、不印、不複製憑證，也不寫入 `~/.trinity-cli/muse-credential`。api 後端缺憑證時，status 改提示這條。
 - 用法說明改成中英完整對照：安裝、第一次設定、每個指令和旗標、`--json` 欄位、結束碼、檔案與安全界線。`--help` 每個指令和旗標都有預設值或範圍。
