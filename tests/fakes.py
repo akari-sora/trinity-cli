@@ -545,6 +545,19 @@ class MuseWorld:
                         "missing": ["side_chats"],
                     },
                 )
+            if mode == "sidebar_closed":
+                # muse-web-cli 0.1.5 shape: no "missing" key, its own error and hint.
+                return _muse_proc(
+                    "ui_changed",
+                    {
+                        "backend": self.backend,
+                        "state": "ui_changed",
+                        "count": 0,
+                        "chats": [],
+                        "error": "讀不到側欄裡的對話清單",
+                        "hint": "請在 Muse 打開側欄後重試",
+                    },
+                )
             if mode not in {"main", "side", "ok"}:
                 return _muse_proc(
                     mode,

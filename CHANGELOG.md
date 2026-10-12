@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.6 - 2026-10-13
+
+- 座位工具釘選：muse-web-cli v0.1.5（Muse 拿掉了舊的聊天室下拉選單，v0.1.4 在新介面上 status、messages、send、chats 都回 `ui_changed`；v0.1.5 認得側欄的聊天室切換）。chatgpt-dot-cli v0.2.3（登入檔跟著 `CODEX_HOME`，缺登入檔會說在哪裡找）。gbot fork 仍是 v0.11.2-iml1s.2。
+- Muse 側欄收起來時，muse-web-cli v0.1.5 的 `chats` 回 `ui_changed`、hint「請在 Muse 打開側欄後重試」，但不帶 `missing`，trinity 的 Muse 座位因此 status、讀取、送出都失敗，還提示「更新 muse-web-cli 後重試」。現在當成看不出主／副聊天室：status 照常回報並註明側欄收起來，讀取和送出仍用目前開啟的對話，和切換面板不在時一樣。
+- 用 `grok add` 加的座位不管取什麼名字都當成 Grok 座位，`ask`、`wait`、`digest` 不會再落到沒設定的 gbot。
+- Windows：npm 的 `.cmd` shim（例如 `gbot.cmd`）改成直接用 node 跑 shim 後面的腳本，cmd.exe 不會解析訊息內容。其他批次檔的參數一律加引號；含引號、`%` 或換行的參數直接拒絕，不送出。
+- 設定檔和 brief 存成帶 BOM 的 UTF-8，或 UTF-16（PowerShell 5.1 `>` 寫出的格式）也能讀；brief 不是 UTF-8 或 UTF-16 時會說要用 UTF-8 存檔。從管線送進來的標準輸入一律當 UTF-8 讀（PowerShell 7、Git Bash 送的就是 UTF-8），不用主控台字碼頁。
+- 文字輸出裡的家目錄顯示成 `~`。找不到座位、還沒有 brief、`grok bots` 看不到 bot 或有 bot 還沒加成座位時，會提示下一步（`trinity-cli grok bots`、`trinity-cli grok add NAME --account LABEL --bot BOT --default`、`trinity-cli brief init`）。
+- 文件：免責聲明、隱私、平台支援表、從 `grok bots` 和 `grok add` 開始的上手流程、release 與授權徽章、CONTRIBUTING、SECURITY、issue 和 merge request 範本。CI 的 Linux 和 Windows runner 改由 CI 變數選擇。
+
 ## 0.4.5 - 2026-10-02
 
 - 安裝說明寫明 `grok-bot-cli-0.11.2.tgz` 來自 grok-bot-cli tag `v0.11.2-iml1s.2`。trinity-cli 的版本釘選是另一個。
