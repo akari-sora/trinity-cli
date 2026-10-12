@@ -32,8 +32,3 @@ def find_seat(seats, key: str):
     if key == "grok":
         return default_grok(seats)
     return next((seat for seat in seats if seat.key == key), None)
-
-
-def enabled_for_all(seats) -> list:
-    """dot, every Grok seat in the list, and muse. Callers already dropped disabled seats."""
-    return list(seats)
