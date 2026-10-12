@@ -443,6 +443,16 @@ class MuseContractTests(unittest.TestCase):
         self.assertEqual(sent.state, "ok")
         self.assertEqual([call[0] for call in world.calls], ["chats", "send"])
 
+    def test_other_chats_ui_changed_still_fails(self):
+        world = MuseWorld()
+        world.chat = "ui_changed"
+        seat, _ = _seat(world)
+        self.assertEqual(seat.status().state, "failed")
+        world.calls.clear()
+        sent = seat.send(None, "你好", "abc123")
+        self.assertEqual(sent.state, "failed")
+        self.assertEqual([call[0] for call in world.calls], ["chats"])
+
     def test_status_shows_a_side_chat(self):
         world = MuseWorld()
         world.chat = "side"
