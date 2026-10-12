@@ -98,6 +98,9 @@ SIDE_CHAT = "目前在副聊天室"
 SIDE_HINT = "在 Muse 視窗切回主聊天室後再讀、再送"
 _CHAT_UNSUPPORTED = "chats 不支援，仍使用目前開啟的對話"
 _CHAT_MISSING = "切換面板不在，仍使用目前開啟的對話"
+_CHAT_SIDEBAR_CLOSED = "Muse 側欄收起來，看不出是主聊天室還是副聊天室，仍使用目前開啟的對話"
+# muse-web-cli 0.1.5+ reports a closed sidebar from `chats` with this hint and no `missing`.
+_MUSE_SIDEBAR_CLOSED_HINT = "請在 Muse 打開側欄後重試"
 _CHAT_UNCLEAR = "看不出目前是主聊天室還是副聊天室，仍使用目前開啟的對話"
 
 
@@ -333,6 +336,8 @@ class MuseSeat(Seat):
             return "unknown", _CHAT_UNSUPPORTED
         if "side_chats" in missing:
             return "unknown", _CHAT_MISSING
+        if state == "ui_changed" and payload.get("hint") == _MUSE_SIDEBAR_CLOSED_HINT:
+            return "unknown", _CHAT_SIDEBAR_CLOSED
         if proc.timed_out or proc.code != 0 or state not in {"", "ok"}:
             raise self._problem(proc, payload)
         chats = payload.get("chats") if isinstance(payload.get("chats"), list) else []

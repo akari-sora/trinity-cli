@@ -40,7 +40,7 @@ def _argv(runner):
 
 class MuseContractTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(__version__, "0.4.5")
+        self.assertEqual(__version__, "0.4.6")
 
     def test_each_exit_state_on_status(self):
         for state, want, hint in _STATES:
@@ -425,6 +425,33 @@ class MuseContractTests(unittest.TestCase):
         sent = seat.send(None, "你好", "abc123")
         self.assertEqual(sent.state, "ok")
         self.assertEqual([call[0] for call in world.calls], ["chats", "send"])
+
+    def test_closed_sidebar_falls_back_with_a_status_note(self):
+        world = MuseWorld()
+        world.chat = "sidebar_closed"
+        seat, _ = _seat(world)
+        status = seat.status()
+        self.assertEqual(status.state, "ok")
+        self.assertIn("Muse 側欄收起來", status.value.summary)
+        self.assertEqual(status.value.details["chat"], "unknown")
+        world.calls.clear()
+        read = seat.read({})
+        self.assertEqual(read.state, "ok")
+        self.assertEqual([call[0] for call in world.calls][:2], ["chats", "messages"])
+        world.calls.clear()
+        sent = seat.send(None, "你好", "abc123")
+        self.assertEqual(sent.state, "ok")
+        self.assertEqual([call[0] for call in world.calls], ["chats", "send"])
+
+    def test_other_chats_ui_changed_still_fails(self):
+        world = MuseWorld()
+        world.chat = "ui_changed"
+        seat, _ = _seat(world)
+        self.assertEqual(seat.status().state, "failed")
+        world.calls.clear()
+        sent = seat.send(None, "你好", "abc123")
+        self.assertEqual(sent.state, "failed")
+        self.assertEqual([call[0] for call in world.calls], ["chats"])
 
     def test_status_shows_a_side_chat(self):
         world = MuseWorld()
