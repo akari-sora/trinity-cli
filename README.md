@@ -208,7 +208,7 @@ trinity-cli hand dot#last --to muse "請看這則"
 
 | 旗標或參數 | 預設 | 範圍 |
 | --- | --- | --- |
-| 對象 | 必填 | `dot`、`muse`、`grok`、`grok:BOT`；單獨 `grok` 用 `grok_bot` |
+| 對象 | 必填 | `dot`、`muse`、`grok`（預設座位）、`grok:BOT`，或座位名 |
 | `--timeout` | 180 | 秒 |
 | `--poll` | 5 | 第一次間隔，之後加倍，上限 30 秒 |
 | `--notify` | 關 | 終端機鈴聲和 macOS 通知，通知不含內文 |
@@ -597,7 +597,7 @@ trinity-cli hand dot#last --to muse "請看這則"
 
 | Argument or flag | Default | Range |
 | --- | --- | --- |
-| target | required | `dot`, `muse`, `grok`, `grok:BOT`; bare `grok` uses `grok_bot` |
+| target | required | `dot`, `muse`, `grok` (the default Grok seat), `grok:BOT`, or a seat name |
 | `--timeout` | 180 | seconds |
 | `--poll` | 5 | first gap, then doubles, capped at 30 seconds |
 | `--notify` | off | terminal bell and a macOS notification, with no message body |

@@ -170,7 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="wait for a new reply after the ledger mark; never resends",
         description="wait for a new reply after the ledger mark; never resends",
     )
-    wait.add_argument("spec", help="dot, muse, grok, or grok:BOT (grok alone uses grok_bot)")
+    wait.add_argument("spec", help="dot, muse, grok (the default Grok seat), grok:BOT, or a seat name such as researcher")
     wait.add_argument("--timeout", type=float, default=180.0, help="seconds to wait (default 180; timeout does not send)")
     wait.add_argument("--poll", type=float, default=5.0, help="first gap between reads, then doubles up to 30s (default 5)")
     wait.add_argument("--notify", action="store_true", help="terminal bell and a macOS notification (default: off; no message body)")
