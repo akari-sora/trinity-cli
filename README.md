@@ -1,5 +1,7 @@
 # trinity-cli
 
+> 正本和 issue 在 https://gitlab.com/aa22396584/trinity-cli；GitHub 上的 https://github.com/hoshitabi/trinity-cli 是唯讀鏡像。
+
 [![pipeline](https://gitlab.com/aa22396584/trinity-cli/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/trinity-cli/-/pipelines)
 [![release](https://gitlab.com/aa22396584/trinity-cli/-/badges/release.svg)](https://gitlab.com/aa22396584/trinity-cli/-/releases)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
