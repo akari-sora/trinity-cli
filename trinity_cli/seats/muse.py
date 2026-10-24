@@ -75,8 +75,6 @@ MESSAGE_LIMIT = 40
 LIMIT_MAX = 100
 CURSOR_KEY = "muse.messages"
 
-_SETUP = {"browser_down", "session_expired", "region_blocked", "profile_busy", "credential_permissions"}
-_PAGE = {"ui_changed", "timeout"}
 _HINTS = {
     "session_expired": FIX_LOGIN,
     "browser_down": FIX_START,
