@@ -222,6 +222,36 @@ class MigrateTestCase(unittest.TestCase):
         self.assertEqual(result["questions"][0]["attempts"], 1)
         self.assertEqual(len(result["questions"]), 1)
 
+    def test_an_answer_in_two_messages_is_read_to_the_end_without_asking_again(self):
+        class TwoPartMuse(ReplyingMuse):
+            """The real answer arrives as a second message, on a later read."""
+
+            later = False
+
+            def __call__(self, args, stdin):
+                out = super().__call__(args, stdin)
+                items = [x for x in args if x not in ("--autostart", "--json")]
+                if items and items[0] == "messages" and self.sends() >= 3 and not self.later:
+                    self.later = True
+                    self.messages.append({"role": "assistant", "text": "Q1: I am Deploy QA, moved from Grok Bot.", "presentation": False})
+                return out
+
+        world = TwoPartMuse({"Moving": "saved intro", "Save:": "saved memory-1", "Who are you": "Q1: I am reading the file, one moment."})
+        world.memory_text = "resume-skills telltale"
+        questions = [{"area": "role", "text": "Who are you now?\nStart your reply with Q1:", "expect": ["Deploy QA"], "marker": "Q1:"}]
+        result = self.run_plan(world, plan(questions=questions))
+        q = result["questions"][0]
+        self.assertTrue(q["ok"], q)
+        self.assertEqual(q["attempts"], 1, "not asked again")
+        self.assertIn("Deploy QA", q["answer"])
+
+    def test_a_wrong_answer_still_fails_after_the_agent_goes_quiet(self):
+        world = ReplyingMuse({"Moving": "saved intro", "Save:": "saved memory-1", "Who are you": "Q1: I am somebody else."})
+        world.memory_text = "resume-skills telltale"
+        questions = [{"area": "role", "text": "Who are you now?\nStart your reply with Q1:", "expect": ["Deploy QA"], "marker": "Q1:"}]
+        result = self.run_plan(world, plan(questions=questions))
+        self.assertFalse(result["questions"][0]["ok"])
+
     def test_plan_validation_refuses_unknown_fields_seats_and_duplicates(self):
         for bad in (plan(extra=1), plan(seat="grok"), plan(steps=[{"id": "a", "text": "x"}, {"id": "a", "text": "y"}]),
                     plan(steps=[{"id": "a", "text": ""}]), plan(checks=[{"kind": "files", "contains": ["x"]}]), plan(format="other")):
