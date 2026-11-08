@@ -507,6 +507,7 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
                         if row.state == "replied" and marker and not _has_marker(text, marker):
                             marked = _marked_reply(seat, nonce, ask_target, lambda t, marker=marker: _has_marker(t, marker), timeout=timeout, poll=poll)
                             text = marked.text if marked is not None else ""
+                            limited = limited or bool(_RATE_LIMIT.search(text))
                         hits = _hits(text, q["expect"])
                         need = q.get("min", len(q["expect"]))
                         tries.append({"ok": row.state == "replied" and len(hits) >= need, "state": row.state, "hits": hits,

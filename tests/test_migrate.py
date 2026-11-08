@@ -207,6 +207,18 @@ class MigrateTestCase(unittest.TestCase):
         self.assertEqual(result["questions"][0]["attempts"], 1)
         self.assertEqual(len(result["questions"]), 1, "the next question is not asked")
 
+    def test_a_marked_rate_limit_after_another_message_also_stops(self):
+        world = SideChatMuse({"Moving": "saved intro", "Save:": "saved memory-1"})
+        world.files = {"Who are you": "Q1: 429 Too Many Requests"}
+        world.interject = True
+        value = plan(chat={"title": "Grok Bot · Deploy QA"}, checkChat={"title": "Grok Bot · Deploy QA · check"}, checks=[],
+                     questions=[{"area": "role", "text": "Who are you now?\nStart your reply with Q1:", "expect": ["Deploy QA"], "marker": "Q1:"},
+                                {"area": "more", "text": "Who are you again?\nStart your reply with Q2:", "expect": ["Deploy QA"], "marker": "Q2:"}])
+        result = self.run_plan(world, value)
+        self.assertTrue(result["stopped"])
+        self.assertEqual(result["questions"][0]["attempts"], 1)
+        self.assertEqual(len(result["questions"]), 1)
+
     def test_plan_validation_refuses_unknown_fields_seats_and_duplicates(self):
         for bad in (plan(extra=1), plan(seat="grok"), plan(steps=[{"id": "a", "text": "x"}, {"id": "a", "text": "y"}]),
                     plan(steps=[{"id": "a", "text": ""}]), plan(checks=[{"kind": "files", "contains": ["x"]}]), plan(format="other")):
