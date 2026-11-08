@@ -13,19 +13,30 @@ answers must contain tokens taken from the source data.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import secrets
 import sys
+import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from itertools import takewhile
 from pathlib import Path
 
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
+    import msvcrt
+
 from trinity_cli.app import ask_one
-from trinity_cli.model import OK, Result, SendReceipt, WaitOutcome
+from trinity_cli.model import OK, ReadOutcome, SendReceipt, WaitOutcome
 from trinity_cli.shown import Shown
 from trinity_cli.state import Ledger, home
-from trinity_cli.util import has_nonce, new_nonce
+from trinity_cli.util import WINDOW_CURSOR, has_nonce, new_nonce
 
 PLAN_FORMAT = "trinity-migration-plan"
 PLAN_VERSION = 1
@@ -33,6 +44,9 @@ SEATS = ("muse", "dot")
 MAX_STEPS = 400
 MAX_TEXT = 16_000
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
+_MARKER = re.compile(r"Q\d+:")
+# The whole read window, not the first-read tail an empty cursor gets.
+_WINDOW = {"*": dict(WINDOW_CURSOR), "dot.messages": dict(WINDOW_CURSOR)}
 
 
 class PlanError(ValueError):
@@ -73,12 +87,19 @@ def load_plan(path: str | Path) -> dict:
         if "expectReply" in step and not _tokens_ok(step["expectReply"]):
             raise PlanError(f"step {step['id']} 的 expectReply 不對")
     for check in plan.get("checks") or []:
-        if not isinstance(check, dict) or check.get("kind") not in ("memory", "schedules") or not _tokens_ok(check.get("contains")) or set(check) - {"id", "kind", "contains", "min", "informational"}:
+        if not isinstance(check, dict) or check.get("kind") not in ("memory", "schedules") or not _tokens_ok(check.get("contains")) or set(check) - {"id", "kind", "contains", "min", "informational"} \
+                or not _min_ok(check, check["contains"]):
             raise PlanError("checks 欄位不對")
     for q in plan.get("questions") or []:
-        if not isinstance(q, dict) or not isinstance(q.get("text"), str) or not _tokens_ok(q.get("expect")) or set(q) - {"id", "area", "text", "expect", "min", "note", "marker"}:
+        if not isinstance(q, dict) or not isinstance(q.get("text"), str) or not _tokens_ok(q.get("expect")) or set(q) - {"id", "area", "text", "expect", "min", "note", "marker"} \
+                or not _min_ok(q, q["expect"]) or ("marker" in q and not (isinstance(q["marker"], str) and _MARKER.fullmatch(q["marker"]))):
             raise PlanError("questions 欄位不對")
     return plan
+
+
+def _min_ok(item: dict, tokens: list) -> bool:
+    need = item.get("min", len(tokens))
+    return isinstance(need, int) and not isinstance(need, bool) and 1 <= need <= len(tokens)
 
 
 def _tokens_ok(value) -> bool:
@@ -97,19 +118,36 @@ def _hits(text: str, tokens: list) -> list:
     return [t for t in tokens if any(a.lower() in lower or (_norm(a) and _norm(a) in flat) for a in (t if isinstance(t, list) else [t]))]
 
 
+def _missing(text: str, tokens: list) -> list:
+    hits = _hits(text, tokens)
+    return [t for t in tokens if t not in hits]
+
+
+def _has_marker(text: str, marker: str) -> bool:
+    """`marker` (`Q1:`) opens the reply, after whitespace and markdown decoration. `Q10:` is not `Q1:`."""
+    return (text or "").lstrip(" \t\r\n*_>#`").startswith(marker)
+
+
+def _digest(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def state_path(plan_id: str) -> Path:
     return home() / "migrations" / f"{plan_id}.json"
 
 
 def _load_state(path: Path, plan: dict) -> dict:
-    if path.is_file():
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if data.get("plan_id") == plan["id"] and data.get("seat") == plan["seat"]:
-                return data
-        except (OSError, json.JSONDecodeError):
-            pass
-    return {"plan_id": plan["id"], "seat": plan["seat"], "steps": {}, "started_at": _iso(datetime.now(timezone.utc))}
+    """A missing file is a fresh start. Any other unreadable file stops the run: starting over
+    would send every step again."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"plan_id": plan["id"], "seat": plan["seat"], "steps": {}, "started_at": _iso(datetime.now(timezone.utc))}
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise PlanError(f"進度檔讀不懂，沒有送出：{path}（{exc}）") from None
+    if not isinstance(data, dict) or data.get("plan_id") != plan["id"] or data.get("seat") != plan["seat"] or not isinstance(data.get("steps"), dict):
+        raise PlanError(f"進度檔不是這份計畫的，沒有送出：{path}")
+    return data
 
 
 def _save_state(path: Path, data: dict) -> None:
@@ -118,54 +156,75 @@ def _save_state(path: Path, data: dict) -> None:
         os.chmod(path.parent, 0o700)
     except OSError:
         pass
-    tmp = path.with_suffix(".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(tmp, path)
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+@contextmanager
+def _locked(path: Path):
+    """One run per plan at a time: a second run stops instead of sending the same step again."""
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock = path.with_name(path.name + ".lock")
+    fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        try:
+            if fcntl:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            else:
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        except OSError:
+            raise PlanError(f"這份計畫已經有另一個 migrate 在跑（{lock}），沒有送出。等它結束再跑。") from None
+        yield
+    finally:
+        os.close(fd)
 
 
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
-def _find_reply(seat, nonce: str, target: str | None = None) -> tuple[bool, object]:
-    """(nonce seen in the chat, the first agent reply after it or None)."""
-    from trinity_cli.model import ReadOutcome
-    result = seat.read({"*": {}}, limit=100, chat=target) if target else seat.read({"*": {}}, limit=100)
+def _replies_after(seat, nonce: str, target: str | None):
+    """The agent's messages after the one carrying `nonce`, up to the next message that is not the
+    agent's (the next step's reply is not this step's). None when the nonce is not in the seat's
+    read window (100 messages on Muse, 32 on dot)."""
+    result = seat.read(_WINDOW, limit=100, chat=target) if target else seat.read(_WINDOW, limit=100)
     if result.state != OK or not isinstance(result.value, ReadOutcome) or not result.value.batches:
-        return False, None
+        return None
     items = result.value.batches[0].items
     index = next((i for i, m in enumerate(items) if not m.from_agent and has_nonce(m.text, nonce)), None)
-    if index is None:
-        return False, None
-    reply = next((m for m in items[index + 1:] if m.from_agent and not m.presentation), None)
-    return True, reply
+    return None if index is None else [m for m in takewhile(lambda m: m.from_agent, items[index + 1:]) if not m.presentation]
 
 
-def _marked_reply(seat, nonce: str, target: str | None, marker: str, *, timeout: float, poll: float, clock=None, sleep=None):
-    """The first agent message after `nonce` that contains `marker`, waiting up to `timeout`.
+def _find_reply(seat, nonce: str, target: str | None = None) -> tuple[bool, object]:
+    """(nonce seen in the chat, the first agent reply after it or None)."""
+    replies = _replies_after(seat, nonce, target)
+    return replies is not None, (replies or [None])[0]
+
+
+def _marked_reply(seat, nonce: str, target: str | None, matches, *, timeout: float, poll: float):
+    """The first agent message after `nonce` for which `matches(text)` holds, waiting up to `timeout`.
 
     An always-on agent also sends messages of its own (alerts, briefs) into the same chat, so
     "the first reply after my message" can be somebody else's topic. A marked reply cannot.
     """
     import time as _time
-    clock = clock or getattr(seat, "clock", None) or _time.monotonic
-    sleep = sleep or getattr(seat, "sleep", None) or _time.sleep
-    from trinity_cli.model import ReadOutcome
+    clock = getattr(seat, "clock", None) or _time.monotonic
+    sleep = getattr(seat, "sleep", None) or _time.sleep
     deadline = clock() + timeout
-    want = _norm(marker)
     while True:
-        result = seat.read({"*": {}}, limit=100, chat=target) if target else seat.read({"*": {}}, limit=100)
-        if result.state == OK and isinstance(result.value, ReadOutcome) and result.value.batches:
-            items = result.value.batches[0].items
-            index = next((i for i, m in enumerate(items) if not m.from_agent and has_nonce(m.text, nonce)), None)
-            if index is not None:
-                found = next((m for m in items[index + 1:] if m.from_agent and not m.presentation and want in _norm(m.text)), None)
-                if found:
-                    return found
+        found = next((m for m in _replies_after(seat, nonce, target) or [] if matches(m.text)), None)
+        if found:
+            return found
         if clock() >= deadline:
             return None
         sleep(min(poll, max(0.0, deadline - clock())))
@@ -181,10 +240,18 @@ class StepOutcome:
     reply: str = ""
 
 
-def run_migration(seat, plan: dict, *, ledger: Ledger, timeout: float, poll: float, resend_unknown: bool = False,
-                  questions: bool = True, path: Path | None = None, redo: list[str] | None = None,
-                  now=lambda: datetime.now(timezone.utc)) -> dict:
+def run_migration(seat, plan: dict, *, path: Path | None = None, **options) -> dict:
+    """Deliver `plan` (see _migrate for the options). One run per plan at a time."""
     path = path or state_path(plan["id"])
+    with _locked(path):
+        return _migrate(seat, plan, path=path, **options)
+
+
+def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, poll: float, resend_unknown: bool = False,
+             questions: bool = True, redo: list[str] | None = None, check_only: bool = False,
+             now=lambda: datetime.now(timezone.utc)) -> dict:
+    if check_only and redo:
+        raise PlanError("--check-only 不送任何步驟，不能和 --redo 一起用")
     state = _load_state(path, plan)
     # --redo: steps the caller found broken on the destination (for example a file whose
     # digest did not match) are sent again even though they were answered before.
@@ -193,6 +260,11 @@ def run_migration(seat, plan: dict, *, ledger: Ledger, timeout: float, poll: flo
         if sid not in known:
             raise PlanError(f"--redo 的步驟不在計畫裡：{sid}")
         state["steps"].pop(sid, None)
+    # A reply answers the text that was sent. If the plan's text changed since, it proves nothing.
+    for step in plan["steps"]:
+        record = state["steps"].get(step["id"])
+        if record and record.get("send") != "not_sent" and record.get("digest") != _digest(step["text"]):
+            raise PlanError(f"步驟 {step['id']} 送出後內容改過了，上次的回覆不算數，沒有送出。要送新內容就加 --redo {step['id']}")
     if redo:
         _save_state(path, state)
     outcomes: list[StepOutcome] = []
@@ -202,10 +274,10 @@ def run_migration(seat, plan: dict, *, ledger: Ledger, timeout: float, poll: flo
     if plan.get("chat") and hasattr(seat, "open_chat"):
         # A dedicated chat keeps the migration out of the main conversation (Muse side chat).
         target = state.get("chat_target")
-        if not target:
+        if not target and not check_only:
             opened = seat.open_chat(plan["chat"]["title"])
             if opened.state == OK:
-                target = opened.value
+                target = opened.value[0]
                 state["chat_target"] = target
                 _save_state(path, state)
             else:
@@ -213,69 +285,76 @@ def run_migration(seat, plan: dict, *, ledger: Ledger, timeout: float, poll: flo
     for step in plan["steps"]:
         sid = step["id"]
         record = state["steps"].get(sid, {})
+        nonce = record.get("nonce", "")
+        reply, note, fresh = None, "", True
         if record.get("state") == "replied":
-            outcomes.append(StepOutcome(sid, "replied", True, "earlier run", record.get("nonce", ""), record.get("reply", "")))
+            reply, note, fresh = record.get("reply", ""), "earlier run", False
+        elif check_only:
+            outcomes.append(StepOutcome(sid, "not delivered", False, "進度檔裡沒有這一步送達並回覆的紀錄（--check-only 不送）", nonce))
             continue
-        nonce = record.get("nonce")
-        if nonce and record.get("send") != "not_sent":
+        elif nonce and record.get("send") != "not_sent":
             # Sent before: read the chat back instead of sending again.
-            seen, reply = _find_reply(seat, nonce, target)
-            if seen and reply is None:
+            seen, found = _find_reply(seat, nonce, target)
+            if seen and found is None:
                 receipt = SendReceipt(seat.label, target or seat.label, nonce, now(), "accepted")
                 waited = seat.wait(receipt, timeout=timeout, poll=poll)
                 if waited.state == OK and isinstance(waited.value, WaitOutcome) and waited.value.reply:
-                    reply = waited.value.reply
-            if seen and reply is not None:
-                record.update(state="replied", reply=reply.text[:2000], replied_at=_iso(reply.at))
+                    found = waited.value.reply
+            if seen and found is not None:
+                record.update(state="replied", reply=found.text[:2000], replied_at=_iso(found.at))
                 state["steps"][sid] = record
                 _save_state(path, state)
-                outcomes.append(StepOutcome(sid, "replied", True, "confirmed by read-back", nonce, reply.text[:500]))
-                continue
-            if seen:
+                reply, note = found.text, "confirmed by read-back"
+            elif seen:
                 stopped = f"{sid}: 已送達但還沒有回覆，沒有重送。稍後再跑一次同一個指令。"
                 outcomes.append(StepOutcome(sid, "waiting", False, stopped, nonce))
                 break
-            if not resend_unknown:
+            elif not resend_unknown:
                 stopped = f"{sid}: 讀回看不到上次送出的訊息（送達狀態不明），沒有重送。先看聊天室，確定沒收到再加 --resend-unknown。"
                 outcomes.append(StepOutcome(sid, "unknown", False, stopped, nonce))
                 break
-        nonce = new_nonce()
-        ask_id = f"{now():%Y%m%dT%H%M%SZ}-migrate-{plan['id'][:12]}-{sid}"
-        state["steps"][sid] = {"state": "sending", "nonce": nonce, "ask_id": ask_id, "attempts": record.get("attempts", 0) + 1, "at": _iso(now())}
-        _save_state(path, state)
-        row = ask_one(seat, target, step["text"], nonce, ask_id=ask_id, ledger=ledger, timeout=timeout, poll=poll, now=now)
-        rec = state["steps"][sid]
-        rec.update(state=row.state, send=row.send, readback=row.readback)
-        if row.reply:
-            rec.update(reply=row.reply.text[:2000], replied_at=_iso(row.reply.at))
-        _save_state(path, state)
-        if row.state == "replied":
-            expect = step.get("expectReply") or []
-            reply = row.reply
-            missing = [t for t in expect if t not in _hits(reply.text, expect)]
-            if missing:
-                # The first reply may be the agent's own unrelated message: look for the marked one.
-                marked = _marked_reply(seat, nonce, target, " ".join(expect), timeout=timeout, poll=poll)
-                if marked is not None:
-                    reply = marked
-                    missing = []
-                    rec.update(reply=reply.text[:2000], replied_at=_iso(reply.at))
-                    _save_state(path, state)
-            outcomes.append(StepOutcome(sid, "replied", not missing, f"回覆缺少 {missing}" if missing else "", nonce, reply.text[:500]))
-            continue
-        if row.state == "timed_out":
-            stopped = f"{sid}: 等不到回覆（{timeout:.0f} 秒），沒有重送。稍後再跑一次同一個指令，會先讀回再繼續。"
-        else:
-            stopped = f"{sid}: {row.error or row.state}" + (f"（{row.hint}）" if row.hint else "")
-        outcomes.append(StepOutcome(sid, row.state, False, stopped, nonce))
-        break
+        if reply is None:
+            nonce = new_nonce()
+            ask_id = f"{now():%Y%m%dT%H%M%SZ}-migrate-{plan['id'][:12]}-{sid}"
+            state["steps"][sid] = {"state": "sending", "nonce": nonce, "digest": _digest(step["text"]), "ask_id": ask_id,
+                                   "attempts": record.get("attempts", 0) + 1, "at": _iso(now())}
+            _save_state(path, state)
+            row = ask_one(seat, target, step["text"], nonce, ask_id=ask_id, ledger=ledger, timeout=timeout, poll=poll, now=now)
+            rec = state["steps"][sid]
+            rec.update(state=row.state, send=row.send, readback=row.readback)
+            if row.reply:
+                rec.update(reply=row.reply.text[:2000], replied_at=_iso(row.reply.at))
+            _save_state(path, state)
+            if row.state != "replied":
+                if row.state == "timed_out":
+                    stopped = f"{sid}: 等不到回覆（{timeout:.0f} 秒），沒有重送。稍後再跑一次同一個指令，會先讀回再繼續。"
+                else:
+                    stopped = f"{sid}: {row.error or row.state}" + (f"（{row.hint}）" if row.hint else "")
+                outcomes.append(StepOutcome(sid, row.state, False, stopped, nonce))
+                break
+            reply = row.reply.text
+        # The reply is checked on every run, so a later run says what the first one said; only a
+        # new matching reply after the nonce turns a miss into a pass.
+        expect = step.get("expectReply") or []
+        missing = _missing(reply, expect)
+        if missing:
+            # The first reply may be the agent's own unrelated message: look for one that matches.
+            marked = _marked_reply(seat, nonce, target, lambda text, expect=expect: not _missing(text, expect),
+                                   timeout=timeout if fresh else 0, poll=poll)
+            if marked is not None:
+                reply, missing = marked.text, []
+                state["steps"][sid].update(reply=reply[:2000], replied_at=_iso(marked.at))
+                _save_state(path, state)
+        outcomes.append(StepOutcome(sid, "replied", not missing, f"回覆缺少 {missing}" if missing else note, nonce, reply[:500]))
 
     checks, answers = [], []
     if not stopped:
         for check in plan.get("checks") or []:
             result = seat.memory() if check["kind"] == "memory" else seat.schedules()
             if result.state != OK:
-                checks.append({"id": check.get("id", check["kind"]), "kind": check["kind"], "state": result.state, "ok": None,
+                # A required check that cannot be read has not passed.
+                checks.append({"id": check.get("id", check["kind"]), "kind": check["kind"], "state": result.state,
+                               "ok": None if check.get("informational") else False, "informational": bool(check.get("informational")),
                                "note": result.error or "這個座位不支援讀回"})
                 continue
             text = result.value if isinstance(result.value, str) else "\n".join(f"{i.title} {i.when}" for i in result.value)
@@ -290,9 +369,12 @@ def run_migration(seat, plan: dict, *, ledger: Ledger, timeout: float, poll: flo
             # has to come from the agent's memory or its files, not from the conversation just sent.
             ask_target, check_chat = target, None
             if plan.get("checkChat") and hasattr(seat, "open_chat"):
-                opened = seat.open_chat(f"{plan['checkChat']['title']} · {now():%m%d-%H%M%S}")
+                # Always a new chat, with a title no earlier chat has; only a chat created here is deleted.
+                title = f"{plan['checkChat']['title']} · {plan['id'][:12]} {now():%Y%m%d-%H%M%S} {secrets.token_hex(3)}"
+                opened = seat.open_chat(title, create_only=True)
                 if opened.state == OK:
-                    ask_target = check_chat = opened.value
+                    ask_target, created = opened.value
+                    check_chat = ask_target if created else None
                 else:
                     chat_note = (chat_note + "；" if chat_note else "") + f"沒開成驗收用的新聊天室（{opened.error}），驗收題問在搬家聊天室，答案可能來自對話上下文"
             try:
@@ -300,13 +382,14 @@ def run_migration(seat, plan: dict, *, ledger: Ledger, timeout: float, poll: flo
                     # Answers vary between runs: a failed question is asked once more (a new message
                     # with its own nonce); both answers stay in the result.
                     tries = []
+                    marker = q.get("marker")
                     for _ in range(2):
                         nonce = new_nonce()
                         ask_id = f"{now():%Y%m%dT%H%M%SZ}-migrate-check-{plan['id'][:12]}"
                         row = ask_one(seat, ask_target, q["text"], nonce, ask_id=ask_id, ledger=ledger, timeout=timeout, poll=poll, now=now)
                         text = row.reply.text if row.reply else ""
-                        if row.state == "replied" and q.get("marker") and _norm(q["marker"]) not in _norm(text):
-                            marked = _marked_reply(seat, nonce, ask_target, q["marker"], timeout=timeout, poll=poll)
+                        if row.state == "replied" and marker and not _has_marker(text, marker):
+                            marked = _marked_reply(seat, nonce, ask_target, lambda t, marker=marker: _has_marker(t, marker), timeout=timeout, poll=poll)
                             text = marked.text if marked is not None else ""
                         hits = _hits(text, q["expect"])
                         need = q.get("min", len(q["expect"]))
@@ -322,8 +405,9 @@ def run_migration(seat, plan: dict, *, ledger: Ledger, timeout: float, poll: flo
                     seat.close_chat(check_chat)
     ok = not stopped and all(o.ok for o in outcomes) and all(c["ok"] is not False for c in checks) and all(a["ok"] for a in answers) \
         and (bool(answers) or not (questions and plan.get("questions")))
-    state["finished_at"] = _iso(now()) if not stopped else None
-    _save_state(path, state)
+    if not check_only:
+        state["finished_at"] = _iso(now()) if not stopped else None
+        _save_state(path, state)
     return {
         "plan_id": plan["id"], "seat": plan["seat"], "ok": ok, "stopped": stopped or None, "state_path": str(path),
         "chat": target, "chat_note": chat_note or None,
@@ -355,7 +439,8 @@ def render(result: dict) -> str:
 
 
 def run_migrate_command(seats, seat_key: str, plan_path: str, *, yes: bool, timeout: float, poll: float,
-                        resend_unknown: bool, questions: bool, ledger: Ledger, stdin, redo: list[str] | None = None) -> Shown:
+                        resend_unknown: bool, questions: bool, ledger: Ledger, stdin, redo: list[str] | None = None,
+                        check_only: bool = False) -> Shown:
     try:
         plan = load_plan(plan_path)
     except PlanError as exc:
@@ -367,7 +452,7 @@ def run_migrate_command(seats, seat_key: str, plan_path: str, *, yes: bool, time
     if seat is None or not seat.supports("send"):
         msg = f"沒有可以傳訊的 {seat_key} 座位"
         return Shown(2, msg, {"ok": False, "error": msg})
-    if not yes:
+    if not yes and not check_only:
         preview = f"會送 {len(plan['steps'])} 則訊息給 {seat.label}（{plan.get('title') or plan['id']}），再讀回並問 {len(plan.get('questions') or [])} 題驗收。"
         if not (stdin and stdin.isatty()):
             msg = preview + " 不是終端機：加 --yes 才會送。"
@@ -378,7 +463,7 @@ def run_migrate_command(seats, seat_key: str, plan_path: str, *, yes: bool, time
             return Shown(2, "沒有送出。", {"ok": False, "sent": False})
     try:
         result = run_migration(seat, plan, ledger=ledger, timeout=timeout, poll=poll, resend_unknown=resend_unknown,
-                               questions=questions, redo=redo)
+                               questions=questions, redo=redo, check_only=check_only)
     except PlanError as exc:
         return Shown(2, str(exc), {"ok": False, "error": str(exc)})
     return Shown(0 if result["ok"] else 1, render(result), result)
