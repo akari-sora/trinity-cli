@@ -4,7 +4,7 @@
 
 一個指令，擋在三個一直開著的個人 agent 前面：ChatGPT 的 Your dot、Grok Bot，以及 Meta 的 Muse。
 
-> 正本和 issue 在 <https://gitlab.com/aa22396584/trinity-cli>。
+> 正本和 issue 在 <https://gitlab.com/aa22396584/trinity-cli>。Release 與下載：<https://gitlab.com/aa22396584/trinity-cli/-/releases>。GitHub 鏡像：<https://github.com/akari-sora/trinity-cli>（issue 與 merge request 請開在 GitLab）。
 
 [![pipeline](https://gitlab.com/aa22396584/trinity-cli/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/trinity-cli/-/pipelines)
 [![release](https://gitlab.com/aa22396584/trinity-cli/-/badges/release.svg)](https://gitlab.com/aa22396584/trinity-cli/-/releases)

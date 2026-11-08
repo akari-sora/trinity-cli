@@ -4,7 +4,7 @@ English | [繁體中文](README.zh-TW.md)
 
 One command in front of three always-on personal agents: ChatGPT Your dot, Grok Bot, and Meta Muse.
 
-> Canonical repository and issues: <https://gitlab.com/aa22396584/trinity-cli>.
+> Canonical repository and issues: <https://gitlab.com/aa22396584/trinity-cli>. Releases and downloads: <https://gitlab.com/aa22396584/trinity-cli/-/releases>. GitHub mirror: <https://github.com/akari-sora/trinity-cli> (open issues and merge requests on GitLab).
 
 [![pipeline](https://gitlab.com/aa22396584/trinity-cli/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/trinity-cli/-/pipelines)
 [![release](https://gitlab.com/aa22396584/trinity-cli/-/badges/release.svg)](https://gitlab.com/aa22396584/trinity-cli/-/releases)
