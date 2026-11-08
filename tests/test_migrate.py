@@ -139,6 +139,18 @@ class MigrateTestCase(unittest.TestCase):
             with self.assertRaises(PlanError):
                 load_plan(self.write(plan(steps=[{"id": "b", "text": "x", "attach": bad}])))
 
+    def test_sends_are_spaced_and_a_rate_limit_stops_the_run(self):
+        world = ReplyingMuse({"Moving": "saved intro", "Save:": "saved memory-1", "Who are you": "Deploy QA"})
+        world.memory_text = "resume-skills telltale"
+        sends = []
+        world.on_send = lambda: sends.append(self.clock.t)
+        result = self.run_plan(world, plan(), min_interval=20)
+        self.assertTrue(result["ok"], result)
+        gaps = [b - a for a, b in zip(sends, sends[1:])]
+        self.assertTrue(gaps and all(g >= 20 for g in gaps), gaps)
+        from trinity_cli.migrate import _stop_note
+        self.assertIn("太頻繁", _stop_note("memory-1", "send failed: 429 Too Many Requests"))
+
     def test_plan_validation_refuses_unknown_fields_seats_and_duplicates(self):
         for bad in (plan(extra=1), plan(seat="grok"), plan(steps=[{"id": "a", "text": "x"}, {"id": "a", "text": "y"}]),
                     plan(steps=[{"id": "a", "text": ""}]), plan(checks=[{"kind": "files", "contains": ["x"]}]), plan(format="other")):

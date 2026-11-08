@@ -251,6 +251,34 @@ class StepOutcome:
     reply: str = ""
 
 
+# Sends are spaced like a person using the app: one message at a time (each waits for its reply)
+# and at least this many seconds between two sends to the same seat.
+DEFAULT_MIN_INTERVAL = 20.0
+_RATE_LIMIT = re.compile(r"429|rate.?limit|too many|quota|slow down|上限|太頻繁|過於頻繁", re.IGNORECASE)
+
+
+class _Pacer:
+    def __init__(self, seat, min_interval: float):
+        import time as _time
+        self.gap = max(0.0, float(min_interval))
+        self.clock = getattr(seat, "clock", None) or _time.monotonic
+        self.sleep = getattr(seat, "sleep", None) or _time.sleep
+        self.last: float | None = None
+
+    def before_send(self) -> None:
+        if self.last is not None:
+            left = self.gap - (self.clock() - self.last)
+            if left > 0:
+                self.sleep(left)
+        self.last = self.clock()
+
+
+def _stop_note(sid: str, error: str) -> str:
+    if _RATE_LIMIT.search(error or ""):
+        return f"{sid}: 對方說訊息太頻繁（{error}），已停下，沒有重送。過一段時間再跑同一個指令，會從這一步接著做。"
+    return f"{sid}: {error}"
+
+
 def run_migration(seat, plan: dict, *, path: Path | None = None, **options) -> dict:
     """Deliver `plan` (see _migrate for the options). One run per plan at a time."""
     path = path or state_path(plan["id"])
@@ -260,7 +288,8 @@ def run_migration(seat, plan: dict, *, path: Path | None = None, **options) -> d
 
 def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, poll: float, resend_unknown: bool = False,
              questions: bool = True, redo: list[str] | None = None, check_only: bool = False,
-             now=lambda: datetime.now(timezone.utc)) -> dict:
+             min_interval: float = DEFAULT_MIN_INTERVAL, now=lambda: datetime.now(timezone.utc)) -> dict:
+    pacer = _Pacer(seat, min_interval)
     if check_only and redo:
         raise PlanError("--check-only 不送任何步驟，不能和 --redo 一起用")
     state = _load_state(path, plan)
@@ -330,6 +359,7 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
             state["steps"][sid] = {"state": "sending", "nonce": nonce, "digest": _digest(step["text"], step.get("attach")), "ask_id": ask_id,
                                    "attempts": record.get("attempts", 0) + 1, "at": _iso(now())}
             _save_state(path, state)
+            pacer.before_send()
             row = ask_one(seat, target, step["text"], nonce, ask_id=ask_id, ledger=ledger, timeout=timeout, poll=poll, now=now,
                           attach=step.get("attach"))
             rec = state["steps"][sid]
@@ -341,7 +371,7 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
                 if row.state == "timed_out":
                     stopped = f"{sid}: 等不到回覆（{timeout:.0f} 秒），沒有重送。稍後再跑一次同一個指令，會先讀回再繼續。"
                 else:
-                    stopped = f"{sid}: {row.error or row.state}" + (f"（{row.hint}）" if row.hint else "")
+                    stopped = _stop_note(sid, row.error or row.state) + (f"（{row.hint}）" if row.hint else "")
                 outcomes.append(StepOutcome(sid, row.state, False, stopped, nonce))
                 break
             reply = row.reply.text
@@ -398,6 +428,7 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
                     for _ in range(2):
                         nonce = new_nonce()
                         ask_id = f"{now():%Y%m%dT%H%M%SZ}-migrate-check-{plan['id'][:12]}"
+                        pacer.before_send()
                         row = ask_one(seat, ask_target, q["text"], nonce, ask_id=ask_id, ledger=ledger, timeout=timeout, poll=poll, now=now)
                         text = row.reply.text if row.reply else ""
                         if row.state == "replied" and marker and not _has_marker(text, marker):
@@ -452,7 +483,7 @@ def render(result: dict) -> str:
 
 def run_migrate_command(seats, seat_key: str, plan_path: str, *, yes: bool, timeout: float, poll: float,
                         resend_unknown: bool, questions: bool, ledger: Ledger, stdin, redo: list[str] | None = None,
-                        check_only: bool = False) -> Shown:
+                        check_only: bool = False, min_interval: float = DEFAULT_MIN_INTERVAL) -> Shown:
     try:
         plan = load_plan(plan_path)
     except PlanError as exc:
@@ -475,7 +506,7 @@ def run_migrate_command(seats, seat_key: str, plan_path: str, *, yes: bool, time
             return Shown(2, "沒有送出。", {"ok": False, "sent": False})
     try:
         result = run_migration(seat, plan, ledger=ledger, timeout=timeout, poll=poll, resend_unknown=resend_unknown,
-                               questions=questions, redo=redo, check_only=check_only)
+                               questions=questions, redo=redo, check_only=check_only, min_interval=min_interval)
     except PlanError as exc:
         return Shown(2, str(exc), {"ok": False, "error": str(exc)})
     return Shown(0 if result["ok"] else 1, render(result), result)
