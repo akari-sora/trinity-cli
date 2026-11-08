@@ -1,6 +1,6 @@
 # trinity-cli
 
-> 正本和 issue 在 https://gitlab.com/aa22396584/trinity-cli。
+> 正本和 issue 在 <https://gitlab.com/aa22396584/trinity-cli>。
 
 [![pipeline](https://gitlab.com/aa22396584/trinity-cli/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/trinity-cli/-/pipelines)
 [![release](https://gitlab.com/aa22396584/trinity-cli/-/badges/release.svg)](https://gitlab.com/aa22396584/trinity-cli/-/releases)
