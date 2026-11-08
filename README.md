@@ -24,17 +24,17 @@ Supported systems: see [Platforms](docs/reference.md#platforms).
 
 ## Install
 
-v0.5.3 pins these versions. After installing trinity and each seat tool, check every `--version`: expect `muse-web-cli 0.1.7`, `trinity-cli 0.5.3`, and `gbot 0.11.2`.
+v0.5.4 pins these versions. After installing trinity and each seat tool, check every `--version`: expect `muse-web-cli 0.1.8`, `trinity-cli 0.5.4`, and `gbot 0.11.2`.
 
 macOS and Linux need Python 3.11+, git, and `uv` on `PATH`. Grok also needs Node.js 22.19.0+ and npm. uv installs commands under `~/.local/bin`; add that directory to `PATH` when `--version` cannot find them. The first `uv tool install` may download a Python.
 
-`npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...` exits 0 but leaves a dangling `gbot`. npm installs the package file attached to grok-bot-cli tag `v0.11.2-iml1s.14` straight from its release link (`…/-/releases/<tag>/downloads/grok-bot-cli-0.11.2.tgz`); the trinity-cli version pin is separate. To always take the newest gbot instead, put `permalink/latest` in place of the tag.
+`npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...` exits 0 but leaves a dangling `gbot`. npm installs the package file attached to grok-bot-cli tag `v0.11.2-iml1s.16` straight from its release link (`…/-/releases/<tag>/downloads/grok-bot-cli-0.11.2.tgz`); the trinity-cli version pin is separate. To always take the newest gbot instead, put `permalink/latest` in place of the tag.
 
 ```bash
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.6"
-npm install -g https://gitlab.com/aa22396584/grok-bot-cli/-/releases/v0.11.2-iml1s.14/downloads/grok-bot-cli-0.11.2.tgz
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.7"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.3"
+npm install -g https://gitlab.com/aa22396584/grok-bot-cli/-/releases/v0.11.2-iml1s.16/downloads/grok-bot-cli-0.11.2.tgz
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.8"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.4"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -46,10 +46,10 @@ Windows (PowerShell, same pins):
 ```powershell
 irm https://astral.sh/uv/install.ps1 | iex
 uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.6"
-npm install -g https://gitlab.com/aa22396584/grok-bot-cli/-/releases/v0.11.2-iml1s.14/downloads/grok-bot-cli-0.11.2.tgz
+npm install -g https://gitlab.com/aa22396584/grok-bot-cli/-/releases/v0.11.2-iml1s.16/downloads/grok-bot-cli-0.11.2.tgz
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.7"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.3"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.8"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.4"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
