@@ -24,9 +24,9 @@ Windows (PowerShell): `.venv\Scripts\python.exe -m unittest discover -s tests`.
 
 - Tests never start a real seat tool or reach a real account. Run them with a temporary `HOME` if you have `gbot` installed.
 - Examples use made-up seat and bot names (`researcher`, `Writer`, `example-login`). Do not use your own.
-- `tests/test_docs.py` checks that every command is documented in both README sections and in `skills/trinity-cli/SKILL.md`, and that version pins agree.
+- `tests/test_docs.py` checks that every command is documented in `README.md`, `README.zh-TW.md`, `docs/reference.md`, `docs/reference.zh-TW.md`, and `skills/trinity-cli/SKILL.md`, and that version pins agree.
 - Never commit tokens, cookies, credential files, account, chat, or bot ids, message text, emails, IP addresses, host names, or absolute local paths. Use fake values in tests and docs.
-- Keep the English and 中文 sections of the README in sync.
+- Keep `README.md` and `README.zh-TW.md` in sync, and `docs/reference.md` and `docs/reference.zh-TW.md` in sync.
 - A bug fix comes with a test that fails without it.
 - One topic per merge request. Describe how you tested it.
 
@@ -38,7 +38,7 @@ GitLab CI runs the tests on Linux for every push and on Windows for merge reques
 
 1. Release the seat tools first if trinity needs their new versions.
 2. Bump `version` in `pyproject.toml` and `trinity_cli/__init__.py`, then run `uv lock`.
-3. Update the pins in both README sections (`vX.Y.Z pins these versions` / `vX.Y.Z 釘這些版本`) and the release-notes text in `.gitlab-ci.yml`. `tests/test_docs.py` fails until they all agree.
+3. Update the pins in `README.md` (`vX.Y.Z pins these versions`) and `README.zh-TW.md` (`vX.Y.Z 釘這些版本`) and the release-notes text in `.gitlab-ci.yml`. `tests/test_docs.py` fails until they all agree.
 4. Add a `## X.Y.Z - YYYY-MM-DD` heading at the top of `CHANGELOG.md`.
 5. Merge to `main` and wait for a green pipeline.
 6. Tag `vX.Y.Z` on `main` and push the tag. The tag pipeline checks the version and creates the GitLab Release.
