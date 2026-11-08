@@ -509,7 +509,8 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
                         need = q.get("min", len(q["expect"]))
                         tries.append({"ok": row.state == "replied" and len(hits) >= need, "state": row.state, "hits": hits,
                                       "answer": text[:1500], "error": row.error})
-                        if tries[-1]["ok"] or row.state != "replied":
+                        # A rate-limit answer is not asked again: the retry would be one more message too many.
+                        if tries[-1]["ok"] or row.state != "replied" or _RATE_LIMIT.search(text or ""):
                             break
                     last = tries[-1]
                     answers.append({"area": q.get("area", ""), **last, "expect": q["expect"], "attempts": len(tries),

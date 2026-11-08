@@ -166,6 +166,14 @@ class MigrateTestCase(unittest.TestCase):
         from trinity_cli.migrate import _stop_note
         self.assertIn("太頻繁", _stop_note("memory-1", "send failed: 429 Too Many Requests"))
 
+    def test_a_rate_limited_answer_is_not_asked_again(self):
+        world = ReplyingMuse({"Moving": "saved intro", "Save:": "saved memory-1", "Who are you": "429 Too Many Requests: slow down"})
+        world.memory_text = "resume-skills telltale"
+        result = self.run_plan(world, plan())
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["questions"][0]["attempts"], 1)
+        self.assertEqual(sum(1 for c in world.calls if c and c[0] == "send" and "Who are you" in c[-1]), 1)
+
     def test_plan_validation_refuses_unknown_fields_seats_and_duplicates(self):
         for bad in (plan(extra=1), plan(seat="grok"), plan(steps=[{"id": "a", "text": "x"}, {"id": "a", "text": "y"}]),
                     plan(steps=[{"id": "a", "text": ""}]), plan(checks=[{"kind": "files", "contains": ["x"]}]), plan(format="other")):
