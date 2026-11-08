@@ -499,7 +499,7 @@ class MuseSeat(Seat):
 
         return self._guard(run)
 
-    def send(self, target: str | None, text: str, nonce: str) -> Result:
+    def send(self, target: str | None, text: str, nonce: str, attach: list[str] | None = None) -> Result:
         session = target if target and target.startswith(CHAT_PREFIX) else None
         if not session:
             try:
@@ -510,11 +510,14 @@ class MuseSeat(Seat):
                 return Result.failed(f"{SIDE_CHAT}，沒有送出", SIDE_HINT)
         body = with_nonce(text, nonce)
         try:
+            # Files are uploaded through the Muse window (muse-web-cli send --attach); that takes longer.
+            files = [arg for path in attach or [] for arg in ("--attach", path)]
+            limit = 600 if attach else 90
             if session:
-                proc, payload = self._invoke(["send", "--session", _session_id(session), "--", body], timeout=90, backend="api")
+                proc, payload = self._invoke(["send", "--session", _session_id(session), *files, "--", body], timeout=limit, backend="api")
                 self._remember(payload, "api")
             else:
-                proc, payload = self._run(["send", "--", body], timeout=90)
+                proc, payload = self._run(["send", *files, "--", body], timeout=limit)
         except Problem as problem:
             return Result.failed(f"{problem.error}，沒有送出", problem.hint)
         state = str(payload.get("state") or "")

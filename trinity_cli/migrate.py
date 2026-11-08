@@ -77,8 +77,15 @@ def load_plan(path: str | Path) -> dict:
         raise PlanError("steps 必須是 1..400 則")
     seen: set[str] = set()
     for step in steps:
-        if not isinstance(step, dict) or set(step) - {"id", "text", "expectReply"}:
+        if not isinstance(step, dict) or set(step) - {"id", "text", "expectReply", "attach"}:
             raise PlanError("step 欄位不對")
+        if "attach" in step:
+            files = step["attach"]
+            if not isinstance(files, list) or not 1 <= len(files) <= 10 or not all(isinstance(f, str) and Path(f).is_absolute() for f in files):
+                raise PlanError(f"step {step.get('id')} 的 attach 要是 1..10 個絕對路徑")
+            for f in files:
+                if not Path(f).is_file() or Path(f).is_symlink():
+                    raise PlanError(f"step {step.get('id')} 要附的檔案不存在或不是一般檔案：{f}")
         if not isinstance(step.get("id"), str) or not _ID.match(step["id"]) or step["id"] in seen:
             raise PlanError("step id 不合法或重複")
         seen.add(step["id"])
@@ -128,8 +135,12 @@ def _has_marker(text: str, marker: str) -> bool:
     return (text or "").lstrip(" \t\r\n*_>#`").startswith(marker)
 
 
-def _digest(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+def _digest(text: str, attach: list[str] | None = None) -> str:
+    """What was sent: the text, plus the bytes of every attached file."""
+    h = hashlib.sha256(text.encode("utf-8"))
+    for path in attach or []:
+        h.update(b"\0" + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode("ascii"))
+    return h.hexdigest()
 
 
 def state_path(plan_id: str) -> Path:
@@ -263,7 +274,7 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
     # A reply answers the text that was sent. If the plan's text changed since, it proves nothing.
     for step in plan["steps"]:
         record = state["steps"].get(step["id"])
-        if record and record.get("send") != "not_sent" and record.get("digest") != _digest(step["text"]):
+        if record and record.get("send") != "not_sent" and record.get("digest") != _digest(step["text"], step.get("attach")):
             raise PlanError(f"步驟 {step['id']} 送出後內容改過了，上次的回覆不算數，沒有送出。要送新內容就加 --redo {step['id']}")
     if redo:
         _save_state(path, state)
@@ -316,10 +327,11 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
         if reply is None:
             nonce = new_nonce()
             ask_id = f"{now():%Y%m%dT%H%M%SZ}-migrate-{plan['id'][:12]}-{sid}"
-            state["steps"][sid] = {"state": "sending", "nonce": nonce, "digest": _digest(step["text"]), "ask_id": ask_id,
+            state["steps"][sid] = {"state": "sending", "nonce": nonce, "digest": _digest(step["text"], step.get("attach")), "ask_id": ask_id,
                                    "attempts": record.get("attempts", 0) + 1, "at": _iso(now())}
             _save_state(path, state)
-            row = ask_one(seat, target, step["text"], nonce, ask_id=ask_id, ledger=ledger, timeout=timeout, poll=poll, now=now)
+            row = ask_one(seat, target, step["text"], nonce, ask_id=ask_id, ledger=ledger, timeout=timeout, poll=poll, now=now,
+                          attach=step.get("attach"))
             rec = state["steps"][sid]
             rec.update(state=row.state, send=row.send, readback=row.readback)
             if row.reply:

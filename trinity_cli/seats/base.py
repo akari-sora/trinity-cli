@@ -44,7 +44,7 @@ class Seat:
     def read(self, cursors: dict, *, since: datetime | None = None, limit: int = 30) -> Result:
         return Result.unsupported(self.unsupported_reason)
 
-    def send(self, target: str | None, text: str, nonce: str) -> Result:
+    def send(self, target: str | None, text: str, nonce: str, attach: list[str] | None = None) -> Result:
         return Result.unsupported(self.unsupported_reason)
 
     def wait(self, receipt: SendReceipt, *, timeout: float, poll: float) -> Result:

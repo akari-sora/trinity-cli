@@ -121,6 +121,24 @@ class MigrateTestCase(unittest.TestCase):
         return run_migration(self.seat(world), load_plan(self.write(value)), ledger=self.ledger, timeout=30, poll=10,
                              path=self.dir / "state.json", **kw)
 
+    def test_an_attached_file_goes_to_the_seat_and_its_bytes_are_bound_to_the_reply(self):
+        bundle = self.dir / "bundle.zip"
+        bundle.write_bytes(b"PK one")
+        value = plan(steps=[{"id": "bundle", "text": "Unzip the attached bundle. Reply saved bundle.", "expectReply": ["saved"], "attach": [str(bundle)]}],
+                     checks=[], questions=[])
+        world = ReplyingMuse({"Unzip": "saved bundle"})
+        result = self.run_plan(world, value)
+        self.assertTrue(result["ok"], result)
+        sent = next(c for c in world.calls if c and c[0] == "send")
+        self.assertEqual(sent[sent.index("--attach") + 1], str(bundle))
+        # Same text, other bytes: the old reply does not count for the new file.
+        bundle.write_bytes(b"PK two")
+        with self.assertRaises(PlanError):
+            self.run_plan(world, value)
+        for bad in ([], ["relative.zip"], [str(self.dir / "missing.zip")]):
+            with self.assertRaises(PlanError):
+                load_plan(self.write(plan(steps=[{"id": "b", "text": "x", "attach": bad}])))
+
     def test_plan_validation_refuses_unknown_fields_seats_and_duplicates(self):
         for bad in (plan(extra=1), plan(seat="grok"), plan(steps=[{"id": "a", "text": "x"}, {"id": "a", "text": "y"}]),
                     plan(steps=[{"id": "a", "text": ""}]), plan(checks=[{"kind": "files", "contains": ["x"]}]), plan(format="other")):
@@ -430,3 +448,18 @@ class MigrateTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DotAttachTests(unittest.TestCase):
+    def test_dot_send_passes_each_file_to_chatgpt_dot_cli(self):
+        from tests.fakes import DotWorld
+        from trinity_cli.seats.dot import DotSeat
+
+        world = DotWorld()
+        runner = FakeRunner(world)
+        seat = DotSeat(runner, binary="chatgpt-dot-cli", hostnames=set(), clock=Clock(), sleep=lambda s: None)
+        result = seat.send(None, "unzip it", "n0nce", attach=["/abs/a.zip", "/abs/b.md"])
+        self.assertEqual(result.state, "ok", result)
+        argv = next(c["argv"] for c in runner.calls if "send" in c["argv"])
+        self.assertEqual([argv[i + 1] for i, a in enumerate(argv) if a == "--attach"], ["/abs/a.zip", "/abs/b.md"])
+        self.assertLess(argv.index("--attach"), argv.index("--"))
