@@ -502,20 +502,22 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
                         _save_state(path, state)
                         row = ask_one(seat, ask_target, q["text"], nonce, ask_id=ask_id, ledger=ledger, timeout=timeout, poll=poll, now=now)
                         text = row.reply.text if row.reply else ""
+                        # Judged on the raw reply, before marker filtering can replace it.
+                        limited = bool(_RATE_LIMIT.search(text))
                         if row.state == "replied" and marker and not _has_marker(text, marker):
                             marked = _marked_reply(seat, nonce, ask_target, lambda t, marker=marker: _has_marker(t, marker), timeout=timeout, poll=poll)
                             text = marked.text if marked is not None else ""
                         hits = _hits(text, q["expect"])
                         need = q.get("min", len(q["expect"]))
                         tries.append({"ok": row.state == "replied" and len(hits) >= need, "state": row.state, "hits": hits,
-                                      "answer": text[:1500], "error": row.error})
+                                      "answer": text[:1500], "error": row.error, "limited": limited})
                         # A rate-limit answer is not asked again: the retry would be one more message too many.
-                        if tries[-1]["ok"] or row.state != "replied" or _RATE_LIMIT.search(text or ""):
+                        if tries[-1]["ok"] or row.state != "replied" or limited:
                             break
                     last = tries[-1]
                     answers.append({"area": q.get("area", ""), **last, "expect": q["expect"], "attempts": len(tries),
                                     "earlier": tries[:-1], "fresh_chat": bool(check_chat), "note": q.get("note")})
-                    if last["state"] != "replied" or (not last["ok"] and _RATE_LIMIT.search(last["answer"])):
+                    if last["state"] != "replied" or (not last["ok"] and last["limited"]):
                         # Not sent, timed out or "too many messages": the next question would fare the same.
                         reason = last["error"] or (last["answer"][:200] if last["state"] == "replied" else last["state"])
                         stopped = _stop_note(f"驗收 {q.get('area') or q['text'][:30]}", reason) + "；後面的驗收題沒有問。"

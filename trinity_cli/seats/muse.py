@@ -528,7 +528,9 @@ class MuseSeat(Seat):
         attempted = bool(payload.get("attempted"))
         sent_at = self.now()
         label = self.label if session else (target or self.label)
-        if proc.timed_out or (state == "timeout" and (attempted or sent)):
+        # Once muse-web-cli attempted the send, any outcome other than a clean "sent" is unknown:
+        # it may have gone out, so it is read back later and never sent again blindly.
+        if proc.timed_out or ((attempted or sent) and not (sent and state in {"", "ok"} and proc.code == 0)):
             error = payload.get("error") if isinstance(payload.get("error"), str) else ""
             return Result.ok(SendReceipt(label, session or label, nonce, sent_at, "accepted" if sent else "unknown", error=error or "送出逾時"))
         if sent and state in {"", "ok"} and proc.code == 0:

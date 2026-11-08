@@ -100,6 +100,12 @@ class SideChatMuse(ReplyingMuse):
         return super().__call__(args, stdin)
 
 
+def _command(args):
+    items = [a for a in args if a not in ("--autostart", "--json")]
+    items = [a for i, a in enumerate(items) if a != "--backend" and (i == 0 or items[i - 1] != "--backend")]
+    return items[0] if items else None
+
+
 def plan(**over):
     base = {
         "format": "trinity-migration-plan", "version": 1, "id": "plan-abc123", "seat": "muse", "title": "Grok Bot: Deploy QA",
@@ -173,6 +179,33 @@ class MigrateTestCase(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["questions"][0]["attempts"], 1)
         self.assertEqual(sum(1 for c in world.calls if c and c[0] == "send" and "Who are you" in c[-1]), 1)
+
+    def test_an_attempted_send_that_did_not_end_cleanly_is_unknown_not_failed(self):
+        from tests.fakes import ok as proc_ok
+
+        world = ReplyingMuse({})
+        seat = self.seat(world)
+        for payload in ({"backend": "browser", "state": "ui_changed", "attempted": True, "sent": False, "error": "page changed after Enter"},
+                        {"backend": "browser", "state": "browser_down", "attempted": True, "sent": False, "error": "gone"}):
+            original = world.__call__
+            result = MuseSeat(FakeRunner(lambda args, stdin, p=payload: proc_ok(p) if _command(args) == "send" else original(args, stdin)),
+                              binary="muse-web-cli", clock=self.clock, sleep=self.clock.sleep).send(None, "hi", "n0nce")
+            self.assertEqual(result.state, "ok", result)
+            self.assertEqual(result.value.delivery, "unknown")
+        not_tried = MuseSeat(FakeRunner(lambda args, stdin: proc_ok({"backend": "browser", "state": "ui_changed", "attempted": False, "sent": False, "error": "composer is not empty"}) if _command(args) == "send" else world(args, stdin)),
+                             binary="muse-web-cli", clock=self.clock, sleep=self.clock.sleep).send(None, "hi", "n0nce")
+        self.assertNotEqual(not_tried.state, "ok", "not attempted is still not sent")
+
+    def test_a_marked_question_answered_by_a_rate_limit_is_not_asked_again(self):
+        world = ReplyingMuse({"Moving": "saved intro", "Save:": "saved memory-1", "Who are you": "429 Too Many Requests"})
+        world.memory_text = "resume-skills telltale"
+        questions = [{"area": "role", "text": "Who are you now?\nStart your reply with Q1:", "expect": ["Deploy QA"], "marker": "Q1:"},
+                     {"area": "more", "text": "Who are you again?\nStart your reply with Q2:", "expect": ["Deploy QA"], "marker": "Q2:"}]
+        result = self.run_plan(world, plan(questions=questions))
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["stopped"])
+        self.assertEqual(result["questions"][0]["attempts"], 1)
+        self.assertEqual(len(result["questions"]), 1, "the next question is not asked")
 
     def test_plan_validation_refuses_unknown_fields_seats_and_duplicates(self):
         for bad in (plan(extra=1), plan(seat="grok"), plan(steps=[{"id": "a", "text": "x"}, {"id": "a", "text": "y"}]),
