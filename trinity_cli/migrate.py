@@ -291,6 +291,35 @@ def _marked_reply(seat, nonce: str, target: str | None, matches, *, timeout: flo
         sleep(min(poll, max(0.0, deadline - clock())))
 
 
+def _settled_answer(seat, nonce: str, target: str | None, expect: list, need: int, first: str, *, timeout: float, poll: float,
+                    marker: str | None = None, quiet: float = 180.0) -> str:
+    """Everything the agent said after the question, read until it holds the expected words or the
+    agent has been quiet for `quiet` seconds (or `timeout` passes).
+
+    An agent may answer in several messages: "Q3: I'm reading the file, one moment", then the
+    answer. Judging only the first marked message scored such answers as wrong (Your dot,
+    2026-11-08). Nothing is sent again here.
+    """
+    import time as _time
+    clock = getattr(seat, "clock", None) or _time.monotonic
+    sleep = getattr(seat, "sleep", None) or _time.sleep
+    start = clock()
+    deadline = start + timeout
+    seen, changed, text = None, start, first
+    while True:
+        # Only this question's messages: with a marker, the ones that start with it.
+        replies = [m for m in (_replies_after(seat, nonce, target) or []) if not marker or _has_marker(m.text, marker)]
+        joined = "\n".join(m.text for m in replies) or first
+        if joined != seen:
+            seen, changed, text = joined, clock(), joined
+            if len(_hits(text, expect)) >= need:
+                return text
+        now = clock()
+        if now >= deadline or now - changed >= min(quiet, timeout):
+            return text
+        sleep(min(poll, max(0.0, deadline - now)))
+
+
 @dataclass
 class StepOutcome:
     id: str
@@ -508,8 +537,11 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
                             marked = _marked_reply(seat, nonce, ask_target, lambda t, marker=marker: _has_marker(t, marker), timeout=timeout, poll=poll)
                             text = marked.text if marked is not None else ""
                             limited = limited or bool(_RATE_LIMIT.search(text))
-                        hits = _hits(text, q["expect"])
                         need = q.get("min", len(q["expect"]))
+                        if row.state == "replied" and not limited and len(_hits(text, q["expect"])) < need:
+                            text = _settled_answer(seat, nonce, ask_target, q["expect"], need, text, timeout=timeout, poll=poll, marker=marker)
+                            limited = bool(_RATE_LIMIT.search(text)) if not _hits(text, q["expect"]) else limited
+                        hits = _hits(text, q["expect"])
                         tries.append({"ok": row.state == "replied" and len(hits) >= need, "state": row.state, "hits": hits,
                                       "answer": text[:1500], "error": row.error, "limited": limited})
                         # A rate-limit answer is not asked again: the retry would be one more message too many.

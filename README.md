@@ -24,7 +24,7 @@ Supported systems: see [Platforms](docs/reference.md#platforms).
 
 ## Install
 
-v0.5.1 pins these versions. After installing trinity and each seat tool, check every `--version`: expect `muse-web-cli 0.1.6`, `trinity-cli 0.5.1`, and `gbot 0.11.2`.
+v0.5.2 pins these versions. After installing trinity and each seat tool, check every `--version`: expect `muse-web-cli 0.1.6`, `trinity-cli 0.5.2`, and `gbot 0.11.2`.
 
 macOS and Linux need Python 3.11+, git, and `uv` on `PATH`. Grok also needs Node.js 22.19.0+ and npm. uv installs commands under `~/.local/bin`; add that directory to `PATH` when `--version` cannot find them. The first `uv tool install` may download a Python.
 
@@ -36,7 +36,7 @@ curl -fsSL -o grok-bot-cli-0.11.2.tgz "https://gitlab.com/-/project/86401528/upl
 npm install -g ./grok-bot-cli-0.11.2.tgz
 rm -f grok-bot-cli-0.11.2.tgz
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.1"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.2"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -53,7 +53,7 @@ npm install -g .\grok-bot-cli-0.11.2.tgz
 Remove-Item grok-bot-cli-0.11.2.tgz
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.1"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.2"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version

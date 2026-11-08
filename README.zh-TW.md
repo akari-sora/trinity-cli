@@ -24,7 +24,7 @@
 
 ## 安裝
 
-v0.5.1 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下：應印出 `muse-web-cli 0.1.6`、`trinity-cli 0.5.1`、`gbot 0.11.2`。
+v0.5.2 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下：應印出 `muse-web-cli 0.1.6`、`trinity-cli 0.5.2`、`gbot 0.11.2`。
 
 macOS 與 Linux 需要 Python 3.11+、git、以及已在 PATH 上的 `uv`。Grok 還要 Node.js 22.19.0+ 和 npm。uv 的執行檔在 `~/.local/bin`；`--version` 找不到時把那個目錄加進 PATH。第一次 `uv tool install` 可能會下載 Python。
 
@@ -36,7 +36,7 @@ curl -fsSL -o grok-bot-cli-0.11.2.tgz "https://gitlab.com/-/project/86401528/upl
 npm install -g ./grok-bot-cli-0.11.2.tgz
 rm -f grok-bot-cli-0.11.2.tgz
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.1"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.2"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -53,7 +53,7 @@ npm install -g .\grok-bot-cli-0.11.2.tgz
 Remove-Item grok-bot-cli-0.11.2.tgz
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.1"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.2"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
