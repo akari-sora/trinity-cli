@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 - 2026-11-08
+
+- 新指令 `trinity-cli migrate <seat> <plan.json>`：把 `gbot migrate` 產生的 trinity-migration-plan 送到 Muse 或 Your dot。一次一則，帶 nonce 與 ledger；結果不確定的不會盲目重送，續跑先讀回；每份計畫一把鎖；進度檔綁定每一步的文字和附檔位元組。`--check-only`（不送任何步驟）、`--redo`、`--min-interval`（預設 20 秒，跨次執行也算）；對方回「太頻繁」或送出失敗就停下。
+- 計畫的步驟可以附檔（`{path, sha256}`，載入時與送出前各算一次雜湊），座位工具用 `--attach-sha256` 再核對一次實際上傳的位元組。
+- 讀回檢查；驗收題帶 `Q<n>:` 標記，Muse 在 trinity 自己建立、以 id 認領的新副聊天室問，問完刪除；答錯的題目再問一次，回「太頻繁」就不再問。
+- Muse 座位：`open_chat`／`close_chat`、指定副聊天室送出與讀取、`--attach`；muse-web-cli 回報已嘗試但沒有乾淨結束的送出記成 `unknown`，不記成沒送出。dot 座位：`--attach`。
+- 釘選：muse-web-cli v0.1.6、chatgpt-dot-cli v0.2.6、grok-bot-cli v0.11.2-iml1s.7（有 `gbot migrate`）。
+- `wait grok` 的說明與 README 改成「預設的 Grok 座位」（!3）。
+
 ## 0.4.6 - 2026-10-13
 
 - 座位工具釘選：muse-web-cli v0.1.5（Muse 拿掉了舊的聊天室下拉選單，v0.1.4 在新介面上 status、messages、send、chats 都回 `ui_changed`；v0.1.5 認得側欄的聊天室切換）。chatgpt-dot-cli v0.2.3（登入檔跟著 `CODEX_HOME`，缺登入檔會說在哪裡找）。gbot fork 仍是 v0.11.2-iml1s.2。
