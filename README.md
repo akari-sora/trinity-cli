@@ -271,6 +271,26 @@ trinity-cli log --seat dot --since 2h --limit 20
 
 `--json`：`records`（帳本上的欄位，不含內部 id）。
 
+`migrate 座位 計畫檔` 把別的工具寫好的搬家計畫（`trinity-migration-plan` v1，例如 `gbot migrate import --to muse`）送進 Muse 或 Your dot，再讀回、再問驗收題。座位只能是 `muse` 或 `dot`。
+
+| 旗標或參數 | 預設 | 範圍 |
+| --- | --- | --- |
+| `座位` | 必填 | `muse`、`dot` |
+| `計畫檔` | 必填 | JSON 計畫；多出來的欄位會被拒絕 |
+| `--yes` | 關 | 不問直接送；不是終端機時一定要加，否則不送 |
+| `--timeout` | 300 | 每一步等回覆的秒數；逾時不重送 |
+| `--poll` | 10 | 讀回間隔秒數 |
+| `--resend-unknown` | 關 | 上次送出後讀回看不到的那一步，才准重送 |
+| `--no-questions` | 關 | 只送與讀回，不問驗收題 |
+
+每一步是一則訊息，跟 `ask` 一樣有 nonce、先寫 ledger 再送、讀回確認。進度存在 `TRINITY_HOME/migrations/<計畫 id>.json`：中途停了（逾時、登入失效、Ctrl-C）就再跑同一行，已回覆的步驟會跳過，送出狀態不明的步驟先讀回聊天室，看得到就不重送。Muse 只有一個 agent、記憶共用，但可以有很多聊天室：計畫有 `chat` 時，會用 api 後端開（或沿用）同名副聊天室，所有步驟都送在那裡，做完把切換狀態改回主聊天室；api 後端不能用時改用目前開著的聊天室，並在結果註明。dot 一個帳號只有一個收件匣，步驟都送在那裡。送完後：Muse 讀 Memory.md 比對關鍵字；dot 的記憶讀不到，驗收題就是讀回。結束碼 0 表示全部送達、讀回與驗收都過；1 表示還沒完成（看 `stopped`）；2 是參數或沒有確認。
+
+```bash
+trinity-cli migrate muse ~/.grok-bot-cli/migrations/example.muse-plan.json --yes
+```
+
+`--json`：`plan_id`、`seat`、`ok`、`stopped`、`state_path`、`chat`、`chat_note`、`steps[]`（`id`、`state`、`ok`、`note`、`nonce`、`reply`）、`checks[]`、`questions[]`。
+
 `login 座位` 不印憑證。
 
 | 旗標或參數 | 預設 | 範圍 |
@@ -659,6 +679,26 @@ trinity-cli log --seat dot --since 2h --limit 20
 ```
 
 `--json`: `records` (ledger fields, without internal ids).
+
+`migrate SEAT PLAN` delivers a migration plan written by another tool (`trinity-migration-plan` v1, for example from `gbot migrate import --to muse`) to Muse or Your dot, reads it back, then asks acceptance questions. SEAT is `muse` or `dot`.
+
+| Flag or argument | Default | Range |
+| --- | --- | --- |
+| `SEAT` | required | `muse`, `dot` |
+| `PLAN` | required | JSON plan; unknown fields are refused |
+| `--yes` | off | send without asking; required when stdin is not a terminal |
+| `--timeout` | 300 | seconds to wait for each reply; a timeout never resends |
+| `--poll` | 10 | seconds between read-backs |
+| `--resend-unknown` | off | allow resending a step whose earlier send could not be read back |
+| `--no-questions` | off | deliver and read back only |
+
+Each step is one message with a nonce, written to the ledger before it leaves and confirmed by read-back, like `ask`. Progress is kept in `TRINITY_HOME/migrations/<plan id>.json`: when a run stops (timeout, expired login, Ctrl-C), run the same command again. Replied steps are skipped, and a step whose delivery is unknown is first looked up in the chat and not resent when it is there. Muse is one agent with shared memory but many chats: when the plan has `chat`, the api backend opens (or reuses) a side chat with that title, every step goes there, and the switched chat is set back to main afterwards; without the api backend the open chat is used and the result says so. A dot account has one inbox, so steps go there. Afterwards Muse's Memory.md is checked for the plan's keywords; a dot's memory cannot be read, so the acceptance questions are the read-back. Exit 0 means delivered, read back and accepted; 1 means not finished (see `stopped`); 2 is usage or no confirmation.
+
+```bash
+trinity-cli migrate muse ~/.grok-bot-cli/migrations/example.muse-plan.json --yes
+```
+
+`--json`: `plan_id`, `seat`, `ok`, `stopped`, `state_path`, `chat`, `chat_note`, `steps[]` (`id`, `state`, `ok`, `note`, `nonce`, `reply`), `checks[]`, `questions[]`.
 
 `login SEAT` does not print a credential.
 

@@ -9,7 +9,7 @@ description: >-
   dot and grok the same thing", "forward that reply", "hand this to grok",
   "wait for dot", "what schedules do my agents have", "which agent should do
   this",   "push the brief", "show the send log", "ask Grok A", "ask Grok B",
-  "list Grok bots", "ask all Grok bots", "ask Muse", or "use the Muse api". 當使用者說「我的龍蝦在幹嘛」
+  "list Grok bots", "ask all Grok bots", "ask Muse", "use the Muse api", or "migrate my Grok bot to Muse/dot". 當使用者說「我的龍蝦在幹嘛」
   「agent 有什麼新消息」「幫我看一下 dot、Grok 和 Muse」「整理一下新訊息」
   「同一個問題問所有 agent」「問 dot」「問研究員」「問 Muse」「把這則轉給 Grok」
   「轉交」「等 dot 回」「有沒有排程」「該派誰」「更新 brief」
@@ -32,7 +32,8 @@ Reply in the user's language.
 8. The shared brief is `~/.trinity-cli/brief.md`. Use `brief show` and `brief diff` freely. If the file is missing, `brief diff` exits 0 and points at `brief init`. `brief init` writes a short template only when the file does not exist. `brief diff` may read Muse memory; that read does not write. Use `brief push` only when the user asked to update instructions. It can write a Grok bot's instructions after confirmation; Your dot and Muse only get a draft, and that draft must not be sent with `ask` unless the user asked for a send.
 9. Use `trinity-cli log` to read the ledger. Use `--json` when you need to parse output. `log --limit` defaults to 50 and must be at least 1.
 10. Run `trinity-cli login muse` only when the user asked to sign Muse in or obtain its token. It runs `muse-web-cli credential`, which logs in through the existing Muse window when needed and writes the gateway token only to `~/.trinity-cli/muse-credential` (mode 600), never printed; `--muse-backend api` uses it. Do not read or print that file. 登入工作階段已失效 means the stored login was rejected: the user signs in again in the Chrome window, then reruns `trinity-cli login muse`. `--api-key` passes stdin to `muse auth set --api-key-stdin`. `--web` runs `muse-web-cli login` for the browser seat. `login dot` runs `codex login`. `login grok` only repeats the Grok Bot app instructions. A missing api credential on status is `trinity-cli login muse`, not the browser login.
-11. For one seat's own commands, use the `chatgpt-dot-cli` and `muse-web-cli` skills, and `gbot --help`. This skill is only the wrapper: https://gitlab.com/aa22396584/trinity-cli https://gitlab.com/aa22396584/chatgpt-dot-cli https://gitlab.com/aa22396584/grok-bot-cli https://gitlab.com/aa22396584/muse-web-cli
+11. Run `trinity-cli migrate muse|dot PLAN --yes` only when the user asked to move an agent there (the plan comes from `gbot migrate import --to muse|dot`, which runs this for you). It sends each step with its own nonce, reads back, checks Muse's Memory.md, and asks acceptance questions. If it stops, report `stopped` and run the same command again later: replied steps are skipped and an unknown delivery is looked up in the chat first. Do not add `--resend-unknown` unless the user checked the chat and the step is missing. Muse plans use their own side chat (api backend) and switch back to main.
+12. For one seat's own commands, use the `chatgpt-dot-cli` and `muse-web-cli` skills, and `gbot --help`. This skill is only the wrapper: https://gitlab.com/aa22396584/trinity-cli https://gitlab.com/aa22396584/chatgpt-dot-cli https://gitlab.com/aa22396584/grok-bot-cli https://gitlab.com/aa22396584/muse-web-cli
 
 Rules:
 
