@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4 - 2026-11-09
+
+- 釘選 muse-web-cli v0.1.8（Muse 把 MEMORY.md 編輯器開在聊天畫面上時，每個指令會先把它關掉，不再一律回 `ui_changed`）與 grok-bot-cli v0.11.2-iml1s.16。程式沒有改。
+
 ## 0.5.3 - 2026-11-09
 
 - 釘選 muse-web-cli v0.1.7（Muse 拿掉「近期」分頁後，`upcoming` 改從「動態」分頁讀排定任務；`trinity-cli schedules` 和搬家時的排程讀回又能用瀏覽器模式）與 grok-bot-cli v0.11.2-iml1s.14。
