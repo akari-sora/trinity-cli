@@ -425,13 +425,17 @@ class MuseSeat(Seat):
 
         return self._guard(run)
 
-    def read(self, cursors: dict, *, since: datetime | None = None, limit: int = MESSAGE_LIMIT) -> Result:
+    def read(self, cursors: dict, *, since: datetime | None = None, limit: int = MESSAGE_LIMIT, chat: str | None = None) -> Result:
         def run() -> Result:
-            kind, _note = self._chat()
-            if kind == "side":
-                raise Problem(SIDE_CHAT, SIDE_HINT)
             bounded = min(LIMIT_MAX, max(1, limit))
-            payload = self._payload(["messages", "--limit", str(bounded)])
+            if chat:
+                # A chat opened by open_chat: always the api backend with an explicit session.
+                payload = self._session_payload(["messages", "--session", _session_id(chat), "--limit", str(bounded)])
+            else:
+                kind, _note = self._chat()
+                if kind == "side":
+                    raise Problem(SIDE_CHAT, SIDE_HINT)
+                payload = self._payload(["messages", "--limit", str(bounded)])
             raw = payload.get("messages") if isinstance(payload.get("messages"), list) else []
             rows = [item for item in raw if isinstance(item, dict) and item.get("role") in {"user", "assistant"}]
             counts: dict[str, int] = {}
@@ -459,7 +463,7 @@ class MuseSeat(Seat):
             label = f"Muse · {self._backend_note()}" if self._backend_note() else "Muse"
             batches = [_batch(messages, keys, cursor if isinstance(cursor, dict) else None, since, label)]
             failures: list = []
-            if self.include_activity:
+            if self.include_activity and not chat:
                 try:
                     activity = self._payload(["activity"])
                 except _Unsupported:
@@ -496,15 +500,21 @@ class MuseSeat(Seat):
         return self._guard(run)
 
     def send(self, target: str | None, text: str, nonce: str) -> Result:
-        try:
-            kind, _note = self._chat()
-        except Problem as problem:
-            return Result.failed(f"{problem.error}，沒有送出", problem.hint)
-        if kind == "side":
-            return Result.failed(f"{SIDE_CHAT}，沒有送出", SIDE_HINT)
+        session = target if target and target.startswith(CHAT_PREFIX) else None
+        if not session:
+            try:
+                kind, _note = self._chat()
+            except Problem as problem:
+                return Result.failed(f"{problem.error}，沒有送出", problem.hint)
+            if kind == "side":
+                return Result.failed(f"{SIDE_CHAT}，沒有送出", SIDE_HINT)
         body = with_nonce(text, nonce)
         try:
-            proc, payload = self._run(["send", "--", body], timeout=90)
+            if session:
+                proc, payload = self._invoke(["send", "--session", _session_id(session), "--", body], timeout=90, backend="api")
+                self._remember(payload, "api")
+            else:
+                proc, payload = self._run(["send", "--", body], timeout=90)
         except Problem as problem:
             return Result.failed(f"{problem.error}，沒有送出", problem.hint)
         state = str(payload.get("state") or "")
@@ -514,17 +524,17 @@ class MuseSeat(Seat):
         sent = bool(payload.get("sent"))
         attempted = bool(payload.get("attempted"))
         sent_at = self.now()
-        label = target or self.label
+        label = self.label if session else (target or self.label)
         if proc.timed_out or (state == "timeout" and (attempted or sent)):
             error = payload.get("error") if isinstance(payload.get("error"), str) else ""
-            return Result.ok(SendReceipt(label, label, nonce, sent_at, "accepted" if sent else "unknown", error=error or "送出逾時"))
+            return Result.ok(SendReceipt(label, session or label, nonce, sent_at, "accepted" if sent else "unknown", error=error or "送出逾時"))
         if sent and state in {"", "ok"} and proc.code == 0:
-            return Result.ok(SendReceipt(label, label, nonce, sent_at, "accepted"))
+            return Result.ok(SendReceipt(label, session or label, nonce, sent_at, "accepted"))
         if not sent:
             problem = self._problem(proc, payload)
             return Result.failed(f"{problem.error}，沒有送出", problem.hint)
         error = payload.get("error") if isinstance(payload.get("error"), str) else ""
-        return Result.ok(SendReceipt(label, label, nonce, sent_at, "accepted", error=error))
+        return Result.ok(SendReceipt(label, session or label, nonce, sent_at, "accepted", error=error))
 
     def wait(self, receipt: SendReceipt, *, timeout: float, poll: float) -> Result:
         deadline = self.clock() + timeout
@@ -533,7 +543,8 @@ class MuseSeat(Seat):
         last_error = ""
         while True:
             polls += 1
-            result = self.read({"*": dict(WINDOW_CURSOR)}, limit=MESSAGE_LIMIT)
+            chat = receipt.target_ref if receipt.target_ref.startswith(CHAT_PREFIX) else None
+            result = self.read({"*": dict(WINDOW_CURSOR)}, limit=MESSAGE_LIMIT, chat=chat)
             if result.state == "unsupported":
                 return result
             if result.state != "ok":
@@ -579,6 +590,41 @@ class MuseSeat(Seat):
 
         return self._guard(run)
 
+    def _session_payload(self, args: list[str], *, timeout: float = 45.0) -> dict:
+        proc, payload = self._invoke(args, timeout=timeout, backend="api")
+        self._remember(payload, "api")
+        state = str(payload.get("state") or "")
+        if proc.code == 4 or state == "unsupported":
+            raise _Unsupported(payload.get("error") or "Muse 副聊天室需要 api 後端（trinity-cli login muse）")
+        if proc.timed_out or proc.code != 0 or state not in {"", "ok"}:
+            raise self._problem(proc, payload)
+        return payload
+
+    def open_chat(self, title: str) -> Result:
+        """A side chat named `title` (reused when it exists), as a send/read target. The api
+        backend's switched chat is put back to main, so other commands keep using the main chat."""
+        def run() -> Result:
+            listed = self._session_payload(["chats"])
+            chats = listed.get("chats") if isinstance(listed.get("chats"), list) else []
+            found = next((c for c in chats if isinstance(c, dict) and c.get("kind") == "side" and c.get("title") == title and c.get("session_id")), None)
+            if found is None:
+                created = self._session_payload(["chats", "--create", "--title", title], timeout=90)
+                rows = created.get("chats") if isinstance(created.get("chats"), list) else []
+                found = next((c for c in rows if isinstance(c, dict) and c.get("is_current") and c.get("session_id")), None)
+                if found is None:
+                    again = self._session_payload(["chats"])
+                    rows = again.get("chats") if isinstance(again.get("chats"), list) else []
+                    found = next((c for c in rows if isinstance(c, dict) and c.get("title") == title and c.get("session_id")), None)
+                try:
+                    self._session_payload(["chats", "--switch", "main"])
+                except Problem:
+                    pass
+            if not found:
+                raise Problem("Muse 沒有回傳新副聊天室的 id", "重試一次；仍失敗就不用副聊天室")
+            return Result.ok(CHAT_PREFIX + str(found["session_id"]))
+
+        return self._guard(run)
+
     def memory(self) -> Result:
         def run() -> Result:
             payload = self._payload(["memory"])
@@ -586,6 +632,13 @@ class MuseSeat(Seat):
             return Result.ok(text)
 
         return self._guard(run)
+
+
+CHAT_PREFIX = "chat:"
+
+
+def _session_id(target: str) -> str:
+    return target[len(CHAT_PREFIX):] if target.startswith(CHAT_PREFIX) else target
 
 
 def _schedule_items(payload: dict, kind: str) -> list[ScheduleItem]:

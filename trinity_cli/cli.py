@@ -122,6 +122,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"trinity-cli {__version__}")
     sub = parser.add_subparsers(dest="command", parser_class=_CommandParser)
 
+    migrate = sub.add_parser(
+        "migrate",
+        help="deliver a migration plan (from gbot migrate) to muse or dot; resumable, read back, then acceptance questions",
+        description=(
+            "deliver a migration plan (from gbot migrate) to muse or dot. Each step is one message with its own nonce in "
+            "the ledger. A step whose delivery is unknown is never resent on its own: a later run reads the chat back first. "
+            "Progress is kept in TRINITY_HOME/migrations/<plan id>.json, so run the same command again to continue."
+        ),
+    )
+    migrate.add_argument("seat", choices=["muse", "dot"], help="destination seat")
+    migrate.add_argument("plan", help="plan file written by gbot migrate (trinity-migration-plan v1)")
+    migrate.add_argument("--yes", action="store_true", help="send without asking (required when stdin is not a terminal)")
+    migrate.add_argument("--timeout", type=float, default=300.0, help="seconds to wait for each reply (default 300); a timeout never resends")
+    migrate.add_argument("--poll", type=float, default=10.0, help="seconds between read-backs (default 10)")
+    migrate.add_argument("--resend-unknown", action="store_true", help="resend a step whose earlier delivery could not be read back (default: stop)")
+    migrate.add_argument("--no-questions", action="store_true", help="skip the acceptance questions (default: ask them)")
+
     sub.add_parser(
         "status",
         help="one line per seat; things waiting on you first (default command)",
@@ -509,6 +526,16 @@ def main(
             return cmd_grok(args, out, err, as_json)
         if command == "login":
             return cmd_login(seats, args, out, err, as_json)
+        if command == "migrate":
+            from trinity_cli.migrate import run_migrate_command
+            return show(
+                run_migrate_command(
+                    seats, args.seat, args.plan, yes=args.yes, timeout=args.timeout, poll=args.poll,
+                    resend_unknown=args.resend_unknown, questions=not args.no_questions, ledger=book, stdin=stdin or sys.stdin,
+                ),
+                out,
+                as_json,
+            )
     except BrokenPipeError:
         return 1
     parser.error(f"unknown command {command}")
