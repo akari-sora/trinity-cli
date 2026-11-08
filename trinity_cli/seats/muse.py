@@ -605,32 +605,25 @@ class MuseSeat(Seat):
 
     def open_chat(self, title: str, *, create_only: bool = False) -> Result:
         """(target, created) for a side chat named `title`, as a send/read target. An existing side
-        chat with that title is reused unless `create_only`, which always creates one and never
-        returns a chat that was listed before. The api backend's switched chat is put back to
-        main, so other commands keep using the main chat."""
+        chat with that title is reused unless `create_only`. A new chat is the one whose id
+        `chats --create` returns as `created`, never one guessed from a list. The api backend's
+        switched chat is put back to main, so other commands keep using the main chat."""
         def run() -> Result:
-            def rows(payload: dict) -> list[dict]:
-                chats = payload.get("chats") if isinstance(payload.get("chats"), list) else []
-                return [c for c in chats if isinstance(c, dict) and c.get("kind") == "side" and c.get("session_id")]
-
-            listed = self._session_payload(["chats"])
-            before = {str(c.get("session_id")) for c in listed.get("chats") or [] if isinstance(c, dict)}
-            found = None if create_only else next((c for c in rows(listed) if c.get("title") == title), None)
-            created = found is None
-            if created:
-                made = self._session_payload(["chats", "--create", "--title", title], timeout=90)
-                new = [c for c in rows(made) if str(c["session_id"]) not in before]
-                found = next((c for c in new if c.get("is_current")), None)
-                if found is None:
-                    new = [c for c in rows(self._session_payload(["chats"])) if str(c["session_id"]) not in before and c.get("title") == title]
-                    found = new[0] if len(new) == 1 else None
-                try:
-                    self._session_payload(["chats", "--switch", "main"])
-                except Problem:
-                    pass
-            if not found:
-                raise Problem("Muse 沒有回傳新副聊天室的 id", "重試一次；仍失敗就不用副聊天室")
-            return Result.ok((CHAT_PREFIX + str(found["session_id"]), created))
+            if not create_only:
+                listed = self._session_payload(["chats"])
+                chats = listed.get("chats") if isinstance(listed.get("chats"), list) else []
+                found = next((c for c in chats if isinstance(c, dict) and c.get("kind") == "side" and c.get("title") == title and c.get("session_id")), None)
+                if found:
+                    return Result.ok((CHAT_PREFIX + str(found["session_id"]), False))
+            made = self._session_payload(["chats", "--create", "--title", title], timeout=90)
+            try:
+                self._session_payload(["chats", "--switch", "main"])
+            except Problem:
+                pass
+            sid = made.get("created")
+            if not isinstance(sid, str) or not sid.strip():
+                raise Problem("Muse 沒有回傳新副聊天室的 id", "更新 muse-web-cli（chats --create 要回報 created）後重試；仍失敗就不用副聊天室")
+            return Result.ok((CHAT_PREFIX + sid.strip(), True))
 
         return self._guard(run)
 

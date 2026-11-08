@@ -9,6 +9,7 @@ from unittest import mock
 from tests.fakes import Clock, FakeRunner, MuseWorld, ok
 from trinity_cli.cli import main
 from trinity_cli.migrate import PlanError, load_plan, run_migration
+from trinity_cli.runner import Proc
 from trinity_cli.seats.muse import MuseSeat
 from trinity_cli.state import Ledger
 
@@ -46,6 +47,9 @@ class SideChatMuse(ReplyingMuse):
         self.counter = 0
         self.files: dict[str, str] = {}
         self.interject = False
+        self.refuse_create = False
+        self.intruder = False
+        self.hide_created = False
 
     def __call__(self, args, stdin):
         items = [a for a in args if a != "--autostart"]
@@ -54,11 +58,19 @@ class SideChatMuse(ReplyingMuse):
         command = rest[0]
         if backend == "api" and command == "chats":
             self.calls.append(rest)
+            created = None
             if "--create" in rest:
+                if self.refuse_create:
+                    return Proc(3, json.dumps({"backend": "api", "state": "ui_changed", "error": "Muse 頁面結構對不上", "hint": None}), "")
                 self.counter += 1
-                sid = f"s{self.counter}"
+                created = sid = f"s{self.counter}"
                 self.side[sid] = {"title": rest[rest.index("--title") + 1], "messages": []}
                 self.switched = sid
+                if self.intruder:
+                    # Another client creates a chat at the same moment; it becomes the current one.
+                    self.counter += 1
+                    self.side[f"s{self.counter}"] = {"title": "someone else's chat", "messages": []}
+                    self.switched = f"s{self.counter}"
             if "--switch" in rest:
                 self.switched = rest[rest.index("--switch") + 1]
             if "--delete" in rest:
@@ -66,7 +78,10 @@ class SideChatMuse(ReplyingMuse):
                 self.side.pop(rest[rest.index("--delete") + 1], None)
             chats = [{"title": None, "is_current": self.switched == "main", "kind": "main", "session_id": "main-id"}]
             chats += [{"title": c["title"], "is_current": self.switched == sid, "kind": "side", "session_id": sid} for sid, c in self.side.items()]
-            return ok({"backend": "api", "state": "ok", "count": len(chats), "chats": chats, "error": None, "hint": None})
+            payload = {"backend": "api", "state": "ok", "count": len(chats), "chats": chats, "error": None, "hint": None}
+            if created and not self.hide_created:
+                payload["created"] = created
+            return ok(payload)
         if backend == "api" and "--session" in rest:
             sid = rest[rest.index("--session") + 1]
             chat = self.side[sid]["messages"]
@@ -457,6 +472,112 @@ class MigrateTestCase(unittest.TestCase):
                     out=io.StringIO(), err=io.StringIO(), ledger=self.ledger, stdin=io.StringIO(""))
         self.assertEqual(code, 2)
 
+
+    def test_a_new_check_chat_is_exactly_the_one_muse_says_it_created(self):
+        world = SideChatMuse({})
+        world.intruder = True
+        seat = self.seat(world)
+        target, created = seat.open_chat("Grok Bot · check", create_only=True).value
+        self.assertEqual((target, created), ("chat:s1", True))
+        self.assertEqual(world.switched, "main")
+        seat.close_chat(target)
+        self.assertEqual(world.deleted, ["s1"])
+        self.assertIn("s2", world.side)
+        world.hide_created = True
+        refused = seat.open_chat("Grok Bot · check", create_only=True)
+        self.assertEqual(refused.state, "failed")
+        self.assertEqual(world.switched, "main")
+
+    def test_questions_that_need_a_fresh_chat_fail_when_it_cannot_be_opened(self):
+        world = SideChatMuse({"Moving": "saved intro", "Save:": "saved memory-1", "Who are you": "Deploy QA (from chat context)"})
+        value = plan(chat={"title": "Grok Bot · Deploy QA"}, checkChat={"title": "Grok Bot · Deploy QA · check"}, checks=[])
+        self.assertTrue(self.run_plan(world, value, questions=False)["ok"])
+        world.refuse_create = True
+        result = self.run_plan(world, value)
+        self.assertFalse(result["ok"], "an answer from the delivery chat must not pass")
+        self.assertFalse(result["questions"][0]["ok"])
+        self.assertFalse(result["questions"][0]["fresh_chat"])
+        self.assertFalse(any(c[0] == "send" and "Who are you" in c[-1] for c in world.calls))
+
+    def test_an_attachment_must_have_the_bytes_the_plan_names(self):
+        import hashlib
+        bundle = self.dir / "bundle.zip"
+        bundle.write_bytes(b"PK one")
+        sha = hashlib.sha256(b"PK one").hexdigest()
+        step = lambda attach: plan(steps=[{"id": "bundle", "text": "Unzip it. Reply saved bundle.", "expectReply": ["saved"], "attach": attach}],
+                                   checks=[], questions=[])
+        world = ReplyingMuse({"Unzip": "saved bundle"})
+        for bad in ([{"path": str(bundle), "sha256": "0" * 64}], [{"path": "rel.zip", "sha256": sha}],
+                    [{"path": str(bundle), "sha256": "xyz"}], [{"path": str(bundle), "sha256": sha, "size": 6}], [{"path": str(bundle)}]):
+            with self.assertRaises(PlanError):
+                load_plan(self.write(step(bad)))
+        loaded = load_plan(self.write(step([{"path": str(bundle), "sha256": sha.upper()}])))
+        bundle.write_bytes(b"PK swapped")  # changed after the plan was checked, before it was sent
+        with self.assertRaises(PlanError) as caught:
+            run_migration(self.seat(world), loaded, ledger=self.ledger, timeout=30, poll=10, path=self.dir / "state.json")
+        self.assertIn(str(bundle), str(caught.exception))
+        self.assertEqual(world.sends(), 0)
+        self.assertFalse(json.loads((self.dir / "state.json").read_text())["steps"] if (self.dir / "state.json").exists() else {})
+        bundle.write_bytes(b"PK one")
+        result = self.run_plan(world, step([{"path": str(bundle), "sha256": sha}]))
+        self.assertTrue(result["ok"], result)
+        sent = next(c for c in world.calls if c and c[0] == "send")
+        self.assertEqual(sent[sent.index("--attach") + 1], str(bundle))
+        # The plain path form names the same bytes, so the step is the one already sent.
+        self.assertTrue(self.run_plan(world, step([str(bundle)]))["ok"])
+        self.assertEqual(world.sends(), 1)
+
+    def test_a_rate_limited_reply_stops_before_the_next_step(self):
+        world = ReplyingMuse({"Moving": "Error 429: rate limit reached, slow down", "Save:": "saved memory-1"})
+        result = self.run_plan(world, plan(checks=[], questions=[]))
+        self.assertFalse(result["ok"])
+        self.assertIn("--redo intro", result["stopped"])
+        self.assertFalse(any(c[0] == "send" and "Save:" in c[-1] for c in world.calls))
+        state = json.loads((self.dir / "state.json").read_text())
+        self.assertIn("429", state["steps"]["intro"]["reply"])
+        # A reply that has the expected words is an answer even if it mentions a quota.
+        world = ReplyingMuse({"Moving": "saved intro; your quota is fine", "Save:": "saved memory-1"})
+        self.assertTrue(run_migration(self.seat(world), plan(checks=[], questions=[]), ledger=self.ledger, timeout=30, poll=10,
+                                      path=self.dir / "other.json")["ok"])
+
+    def test_a_question_that_cannot_be_sent_stops_the_other_questions(self):
+        world = ReplyingMuse({"Moving": "saved intro", "Save:": "saved memory-1", "Who are you": "Deploy QA", "Where": "~/grok-bot"})
+        value = plan(checks=[], questions=[{"area": "role", "text": "Who are you now?", "expect": ["Deploy QA"]},
+                                           {"area": "files", "text": "Where are your files?", "expect": ["grok-bot"]}])
+        self.assertTrue(self.run_plan(world, value, questions=False)["ok"])
+        world.silent = True
+        result = self.run_plan(world, value)
+        self.assertTrue(result["stopped"])
+        self.assertFalse(result["ok"])
+        self.assertEqual(len(result["questions"]), 1)
+        self.assertFalse(any(c[0] == "send" and "Where are" in c[-1] for c in world.calls))
+
+    def test_the_gap_between_sends_holds_across_runs(self):
+        from datetime import datetime, timedelta, timezone
+        world = ReplyingMuse({"Moving": "saved intro", "Save:": "saved memory-1"})
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        self.assertTrue(self.run_plan(world, plan(checks=[], questions=[]), min_interval=20, now=lambda: start)["ok"])
+        before = len(self.clock.sleeps)
+        later = start + timedelta(seconds=5)
+        again = self.run_plan(world, plan(checks=[], questions=[]), min_interval=20, now=lambda: later, redo=["memory-1"])
+        self.assertTrue(again["ok"], again)
+        self.assertAlmostEqual(self.clock.sleeps[before], 15.0)
+
+    def test_a_progress_file_with_unknown_or_mistyped_records_stops(self):
+        world = ReplyingMuse({"Moving": "saved intro", "Save:": "saved memory-1"})
+        state = self.dir / "state.json"
+        good = {"state": "replied", "nonce": "abc", "digest": "0" * 64, "ask_id": "x", "attempts": 1, "at": "2026-01-01T00:00:00+00:00"}
+        base = {"plan_id": "plan-abc123", "seat": "muse", "started_at": "2026-01-01T00:00:00+00:00"}
+        for steps, extra in (({"intro": {}}, {}), ({"intro": {**good, "attempts": "1"}}, {}), ({"intro": {**good, "attempts": True}}, {}),
+                             ({"intro": {**good, "surprise": 1}}, {}), ({"intro": "replied"}, {}), ({}, {"extra": 1}),
+                             ({}, {"last_send_at": "yesterday"}), ({}, {"chat_target": 5})):
+            state.write_text(json.dumps({**base, "steps": steps, **extra}), encoding="utf-8")
+            with self.assertRaises(PlanError) as caught:
+                self.run_plan(world, plan(checks=[], questions=[]))
+            self.assertIn(str(state), str(caught.exception))
+        self.assertEqual(world.sends(), 0)
+        with self.assertRaises(PlanError):
+            load_plan(self.write(plan(checks=[{"id": "memory", "kind": "memory", "contains": ["x"], "informational": "false"}])))
 
 if __name__ == "__main__":
     unittest.main()

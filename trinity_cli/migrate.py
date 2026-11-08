@@ -36,7 +36,7 @@ from trinity_cli.app import ask_one
 from trinity_cli.model import OK, ReadOutcome, SendReceipt, WaitOutcome
 from trinity_cli.shown import Shown
 from trinity_cli.state import Ledger, home
-from trinity_cli.util import WINDOW_CURSOR, has_nonce, new_nonce
+from trinity_cli.util import WINDOW_CURSOR, has_nonce, new_nonce, one_line
 
 PLAN_FORMAT = "trinity-migration-plan"
 PLAN_VERSION = 1
@@ -45,6 +45,7 @@ MAX_STEPS = 400
 MAX_TEXT = 16_000
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 _MARKER = re.compile(r"Q\d+:")
+_SHA256 = re.compile(r"[0-9a-fA-F]{64}")
 # The whole read window, not the first-read tail an empty cursor gets.
 _WINDOW = {"*": dict(WINDOW_CURSOR), "dot.messages": dict(WINDOW_CURSOR)}
 
@@ -80,12 +81,7 @@ def load_plan(path: str | Path) -> dict:
         if not isinstance(step, dict) or set(step) - {"id", "text", "expectReply", "attach"}:
             raise PlanError("step 欄位不對")
         if "attach" in step:
-            files = step["attach"]
-            if not isinstance(files, list) or not 1 <= len(files) <= 10 or not all(isinstance(f, str) and Path(f).is_absolute() for f in files):
-                raise PlanError(f"step {step.get('id')} 的 attach 要是 1..10 個絕對路徑")
-            for f in files:
-                if not Path(f).is_file() or Path(f).is_symlink():
-                    raise PlanError(f"step {step.get('id')} 要附的檔案不存在或不是一般檔案：{f}")
+            step["attach"] = _attachments(step)
         if not isinstance(step.get("id"), str) or not _ID.match(step["id"]) or step["id"] in seen:
             raise PlanError("step id 不合法或重複")
         seen.add(step["id"])
@@ -95,13 +91,40 @@ def load_plan(path: str | Path) -> dict:
             raise PlanError(f"step {step['id']} 的 expectReply 不對")
     for check in plan.get("checks") or []:
         if not isinstance(check, dict) or check.get("kind") not in ("memory", "schedules") or not _tokens_ok(check.get("contains")) or set(check) - {"id", "kind", "contains", "min", "informational"} \
-                or not _min_ok(check, check["contains"]):
+                or not _min_ok(check, check["contains"]) or not isinstance(check.get("informational", False), bool):
             raise PlanError("checks 欄位不對")
     for q in plan.get("questions") or []:
         if not isinstance(q, dict) or not isinstance(q.get("text"), str) or not _tokens_ok(q.get("expect")) or set(q) - {"id", "area", "text", "expect", "min", "note", "marker"} \
                 or not _min_ok(q, q["expect"]) or ("marker" in q and not (isinstance(q["marker"], str) and _MARKER.fullmatch(q["marker"]))):
             raise PlanError("questions 欄位不對")
     return plan
+
+
+def _attachments(step: dict) -> list[dict]:
+    """The step's files as {"path", "sha256"}, hashed now. A file the plan gives with a sha256
+    (or one already checked) must still have exactly those bytes."""
+    files = step["attach"]
+    if not isinstance(files, list) or not 1 <= len(files) <= 10:
+        raise PlanError(f"step {step.get('id')} 的 attach 要是 1..10 個檔案")
+    out = []
+    for item in files:
+        if isinstance(item, dict) and set(item) == {"path", "sha256"} and isinstance(item["sha256"], str) and _SHA256.fullmatch(item["sha256"]):
+            path, want = item["path"], item["sha256"].lower()
+        else:
+            path, want = item, None
+        if not isinstance(path, str) or not Path(path).is_absolute():
+            raise PlanError(f"step {step.get('id')} 的 attach 要是絕對路徑，或 {{\"path\": 絕對路徑, \"sha256\": 64 個十六進位字}}")
+        if not Path(path).is_file() or Path(path).is_symlink():
+            raise PlanError(f"step {step.get('id')} 要附的檔案不存在或不是一般檔案：{path}")
+        try:
+            with open(path, "rb") as fh:
+                have = hashlib.file_digest(fh, "sha256").hexdigest()
+        except OSError as exc:
+            raise PlanError(f"step {step.get('id')} 要附的檔案讀不到：{path}（{exc}）") from None
+        if want and have != want:
+            raise PlanError(f"step {step.get('id')} 要附的檔案內容和計畫寫的 sha256 不同，沒有送出：{path}")
+        out.append({"path": path, "sha256": have})
+    return out
 
 
 def _min_ok(item: dict, tokens: list) -> bool:
@@ -135,11 +158,11 @@ def _has_marker(text: str, marker: str) -> bool:
     return (text or "").lstrip(" \t\r\n*_>#`").startswith(marker)
 
 
-def _digest(text: str, attach: list[str] | None = None) -> str:
-    """What was sent: the text, plus the bytes of every attached file."""
-    h = hashlib.sha256(text.encode("utf-8"))
-    for path in attach or []:
-        h.update(b"\0" + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode("ascii"))
+def _digest(step: dict) -> str:
+    """What was sent: the text, plus the sha256 of every attached file (checked by load_plan)."""
+    h = hashlib.sha256(step["text"].encode("utf-8"))
+    for item in step.get("attach") or []:
+        h.update(b"\0" + item["sha256"].encode("ascii"))
     return h.hexdigest()
 
 
@@ -156,9 +179,36 @@ def _load_state(path: Path, plan: dict) -> dict:
         return {"plan_id": plan["id"], "seat": plan["seat"], "steps": {}, "started_at": _iso(datetime.now(timezone.utc))}
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise PlanError(f"進度檔讀不懂，沒有送出：{path}（{exc}）") from None
-    if not isinstance(data, dict) or data.get("plan_id") != plan["id"] or data.get("seat") != plan["seat"] or not isinstance(data.get("steps"), dict):
+    if not isinstance(data, dict) or data.get("plan_id") != plan["id"] or data.get("seat") != plan["seat"]:
         raise PlanError(f"進度檔不是這份計畫的，沒有送出：{path}")
+    if not _state_ok(data):
+        raise PlanError(f"進度檔的欄位不對，沒有送出：{path}")
     return data
+
+
+_NONE = type(None)
+_STATE = {"plan_id": str, "seat": str, "steps": dict, "started_at": str, "chat_target": str, "finished_at": (str, _NONE), "last_send_at": str}
+_RECORD = {"state": str, "nonce": str, "digest": str, "ask_id": str, "attempts": int, "at": str,
+           "send": str, "readback": str, "reply": str, "replied_at": (str, _NONE)}
+_RECORD_NEEDS = {"state", "nonce", "digest", "ask_id", "attempts", "at"}
+
+
+def _state_ok(data: dict) -> bool:
+    """Only fields this module writes, with the types it writes: a record it cannot trust could
+    make a sent step look unsent."""
+    if set(data) - set(_STATE) or "steps" not in data or any(not isinstance(v, _STATE[k]) for k, v in data.items()):
+        return False
+    for record in data["steps"].values():
+        if not isinstance(record, dict) or set(record) - set(_RECORD) or not _RECORD_NEEDS <= set(record) \
+                or any(not isinstance(v, _RECORD[k]) for k, v in record.items()) or isinstance(record["attempts"], bool) or not record["nonce"]:
+            return False
+    if "last_send_at" in data:
+        try:
+            if datetime.fromisoformat(data["last_send_at"]).tzinfo is None:
+                return False
+        except ValueError:
+            return False
+    return True
 
 
 def _save_state(path: Path, data: dict) -> None:
@@ -258,12 +308,19 @@ _RATE_LIMIT = re.compile(r"429|rate.?limit|too many|quota|slow down|上限|太�
 
 
 class _Pacer:
-    def __init__(self, seat, min_interval: float):
+    """Waits out the gap since the last send, also one from an earlier run: its wall-clock time
+    is kept in the progress file (the caller saves it)."""
+
+    def __init__(self, seat, min_interval: float, state: dict, now):
         import time as _time
         self.gap = max(0.0, float(min_interval))
         self.clock = getattr(seat, "clock", None) or _time.monotonic
         self.sleep = getattr(seat, "sleep", None) or _time.sleep
+        self.state, self.now = state, now
         self.last: float | None = None
+        if state.get("last_send_at"):
+            elapsed = max(0.0, (now() - datetime.fromisoformat(state["last_send_at"])).total_seconds())
+            self.last = self.clock() - elapsed
 
     def before_send(self) -> None:
         if self.last is not None:
@@ -271,6 +328,7 @@ class _Pacer:
             if left > 0:
                 self.sleep(left)
         self.last = self.clock()
+        self.state["last_send_at"] = _iso(self.now())
 
 
 def _stop_note(sid: str, error: str) -> str:
@@ -289,10 +347,10 @@ def run_migration(seat, plan: dict, *, path: Path | None = None, **options) -> d
 def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, poll: float, resend_unknown: bool = False,
              questions: bool = True, redo: list[str] | None = None, check_only: bool = False,
              min_interval: float = DEFAULT_MIN_INTERVAL, now=lambda: datetime.now(timezone.utc)) -> dict:
-    pacer = _Pacer(seat, min_interval)
     if check_only and redo:
         raise PlanError("--check-only 不送任何步驟，不能和 --redo 一起用")
     state = _load_state(path, plan)
+    pacer = _Pacer(seat, min_interval, state, now)
     # --redo: steps the caller found broken on the destination (for example a file whose
     # digest did not match) are sent again even though they were answered before.
     known = {step["id"] for step in plan["steps"]}
@@ -303,7 +361,7 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
     # A reply answers the text that was sent. If the plan's text changed since, it proves nothing.
     for step in plan["steps"]:
         record = state["steps"].get(step["id"])
-        if record and record.get("send") != "not_sent" and record.get("digest") != _digest(step["text"], step.get("attach")):
+        if record and record.get("send") != "not_sent" and record.get("digest") != _digest(step):
             raise PlanError(f"步驟 {step['id']} 送出後內容改過了，上次的回覆不算數，沒有送出。要送新內容就加 --redo {step['id']}")
     if redo:
         _save_state(path, state)
@@ -354,14 +412,16 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
                 outcomes.append(StepOutcome(sid, "unknown", False, stopped, nonce))
                 break
         if reply is None:
+            if step.get("attach"):
+                _attachments(step)  # hashed again: a file changed since load_plan stops here, before anything is recorded or sent
             nonce = new_nonce()
             ask_id = f"{now():%Y%m%dT%H%M%SZ}-migrate-{plan['id'][:12]}-{sid}"
-            state["steps"][sid] = {"state": "sending", "nonce": nonce, "digest": _digest(step["text"], step.get("attach")), "ask_id": ask_id,
+            pacer.before_send()
+            state["steps"][sid] = {"state": "sending", "nonce": nonce, "digest": _digest(step), "ask_id": ask_id,
                                    "attempts": record.get("attempts", 0) + 1, "at": _iso(now())}
             _save_state(path, state)
-            pacer.before_send()
             row = ask_one(seat, target, step["text"], nonce, ask_id=ask_id, ledger=ledger, timeout=timeout, poll=poll, now=now,
-                          attach=step.get("attach"))
+                          attach=[item["path"] for item in step.get("attach") or []] or None)
             rec = state["steps"][sid]
             rec.update(state=row.state, send=row.send, readback=row.readback)
             if row.reply:
@@ -387,6 +447,11 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
                 reply, missing = marked.text, []
                 state["steps"][sid].update(reply=reply[:2000], replied_at=_iso(marked.at))
                 _save_state(path, state)
+        if _RATE_LIMIT.search(reply) and (missing or not expect):
+            # The agent answered "too many messages": the next step would only get the same answer.
+            stopped = f"{sid}: 回覆說訊息太頻繁（{one_line(reply, 200)}），已停下，下一步沒有送。過一段時間加 --redo {sid} 再跑同一個指令。"
+            outcomes.append(StepOutcome(sid, "replied", False, stopped, nonce, reply[:500]))
+            break
         outcomes.append(StepOutcome(sid, "replied", not missing, f"回覆缺少 {missing}" if missing else note, nonce, reply[:500]))
 
     checks, answers = [], []
@@ -409,18 +474,23 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
         if questions and plan.get("questions"):
             # Ask where the migration messages are not visible (a fresh Muse side chat), so an answer
             # has to come from the agent's memory or its files, not from the conversation just sent.
-            ask_target, check_chat = target, None
-            if plan.get("checkChat") and hasattr(seat, "open_chat"):
+            ask_target, check_chat, refused = target, None, ""
+            if plan.get("checkChat"):
                 # Always a new chat, with a title no earlier chat has; only a chat created here is deleted.
+                # Without one the questions are not asked: answers from the delivery chat prove nothing.
                 title = f"{plan['checkChat']['title']} · {plan['id'][:12]} {now():%Y%m%d-%H%M%S} {secrets.token_hex(3)}"
-                opened = seat.open_chat(title, create_only=True)
-                if opened.state == OK:
-                    ask_target, created = opened.value
-                    check_chat = ask_target if created else None
+                opened = seat.open_chat(title, create_only=True) if hasattr(seat, "open_chat") else None
+                if opened is not None and opened.state == OK and opened.value[1]:
+                    ask_target = check_chat = opened.value[0]
                 else:
-                    chat_note = (chat_note + "；" if chat_note else "") + f"沒開成驗收用的新聊天室（{opened.error}），驗收題問在搬家聊天室，答案可能來自對話上下文"
+                    refused = f"沒開成驗收用的新聊天室（{opened.error if opened is not None else '這個座位不能開新聊天室'}），驗收題沒有問，不算過"
+                    chat_note = (chat_note + "；" if chat_note else "") + refused
             try:
                 for q in plan["questions"]:
+                    if refused:
+                        answers.append({"area": q.get("area", ""), "ok": False, "state": "not_asked", "hits": [], "answer": "", "error": refused,
+                                        "expect": q["expect"], "attempts": 0, "earlier": [], "fresh_chat": False, "note": q.get("note")})
+                        continue
                     # Answers vary between runs: a failed question is asked once more (a new message
                     # with its own nonce); both answers stay in the result.
                     tries = []
@@ -429,6 +499,7 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
                         nonce = new_nonce()
                         ask_id = f"{now():%Y%m%dT%H%M%SZ}-migrate-check-{plan['id'][:12]}"
                         pacer.before_send()
+                        _save_state(path, state)
                         row = ask_one(seat, ask_target, q["text"], nonce, ask_id=ask_id, ledger=ledger, timeout=timeout, poll=poll, now=now)
                         text = row.reply.text if row.reply else ""
                         if row.state == "replied" and marker and not _has_marker(text, marker):
@@ -443,6 +514,11 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
                     last = tries[-1]
                     answers.append({"area": q.get("area", ""), **last, "expect": q["expect"], "attempts": len(tries),
                                     "earlier": tries[:-1], "fresh_chat": bool(check_chat), "note": q.get("note")})
+                    if last["state"] != "replied" or (not last["ok"] and _RATE_LIMIT.search(last["answer"])):
+                        # Not sent, timed out or "too many messages": the next question would fare the same.
+                        reason = last["error"] or (last["answer"][:200] if last["state"] == "replied" else last["state"])
+                        stopped = _stop_note(f"驗收 {q.get('area') or q['text'][:30]}", reason) + "；後面的驗收題沒有問。"
+                        break
             finally:
                 if check_chat and hasattr(seat, "close_chat"):
                     seat.close_chat(check_chat)
