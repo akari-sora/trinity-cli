@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 - 2026-11-08
+
+- 釘選 grok-bot-cli v0.11.2-iml1s.13（`gbot migrate` 的排程選項、交接時先關 Grok Bot 再開目的地、逐檔判斷記憶完整性；`gbot-install install grokbot`）。程式沒有改。
+- 文件分成英文 `README.md` 與繁體中文 `README.zh-TW.md`，參考資料移到 `docs/reference*.md`。
+
 ## 0.5.0 - 2026-11-08
 
 - 新指令 `trinity-cli migrate <seat> <plan.json>`：把 `gbot migrate` 產生的 trinity-migration-plan 送到 Muse 或 Your dot。一次一則，帶 nonce 與 ledger；結果不確定的不會盲目重送，續跑先讀回；每份計畫一把鎖；進度檔綁定每一步的文字和附檔位元組。`--check-only`（不送任何步驟）、`--redo`、`--min-interval`（預設 20 秒，跨次執行也算）；對方回「太頻繁」或送出失敗就停下。
