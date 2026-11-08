@@ -112,7 +112,8 @@ class DocsDriftTests(unittest.TestCase):
                     self.assertNotIn("github.com/ImL1s/grok-bot-cli", text)
                     self.assertNotIn("npm install -g \"git+https://gitlab.com/aa22396584/grok-bot-cli", text)
                 self.assertIn("22.19.0", readme)
-                self.assertGreaterEqual(readme.count("grok-bot-cli-0.11.2.tgz"), 4)
+                self.assertEqual(readme.count("npm install -g https://gitlab.com/aa22396584/grok-bot-cli/-/releases/v0.11.2-iml1s."), 2)
+                self.assertNotIn("/uploads/", readme)
                 self.assertIn("FORK.md#install", readme)
 
     def test_docs_say_login_muse_stores_the_gateway_token(self):
