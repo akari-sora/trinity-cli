@@ -288,6 +288,8 @@ trinity-cli log --seat dot --since 2h --limit 20
 
 每一步是一則訊息（可以附檔，見計畫的 `attach`：絕對路徑，或 `{"path": …, "sha256": …}`；送出前重算 sha256，和計畫不符就停下不送），跟 `ask` 一樣有 nonce、先寫 ledger 再送、讀回確認。進度存在 `TRINITY_HOME/migrations/<計畫 id>.json`：中途停了（逾時、登入失效、Ctrl-C）就再跑同一行，已回覆的步驟會跳過，送出狀態不明的步驟先讀回聊天室，看得到就不重送。回覆每次都重新比對 `expectReply`，上次沒對上的這次也不會算過。進度檔壞掉、或同一份計畫已有另一個 migrate 在跑，就停下來不送；送出後計畫裡那一步的內容改了，也會停，要送新內容就加 `--redo 步驟`。驗收題每次都開一個新的副聊天室（認 muse-web-cli `chats --create` 回報的 `created` id），最後只刪它；開不成就不問，驗收算沒過。Muse 只有一個 agent、記憶共用，但可以有很多聊天室：計畫有 `chat` 時，會用 api 後端開（或沿用）同名副聊天室，所有步驟都送在那裡，做完把切換狀態改回主聊天室；api 後端不能用時改用目前開著的聊天室，並在結果註明。dot 一個帳號只有一個收件匣，步驟都送在那裡。送完後：Muse 讀 Memory.md 比對關鍵字（不是「僅供參考」的讀回讀不到就算沒過）；dot 的記憶讀不到，驗收題就是讀回。結束碼 0 表示全部送達、讀回與驗收都過；1 表示還沒完成（看 `stopped`）；2 是參數或沒有確認。
 
+migrate 需要的座位工具功能：muse-web-cli 的 `chats --create` 回報 `created` id、`send --attach` 與 `--attach-sha256`，以及 chatgpt-dot-cli 的 `send --attach` 與 `--attach-sha256`。這些會在兩個工具的下一版釋出，上面釘的版本還沒有。
+
 ```bash
 trinity-cli migrate muse ~/.grok-bot-cli/migrations/example.muse-plan.json --yes
 ```
@@ -699,6 +701,8 @@ trinity-cli log --seat dot --since 2h --limit 20
 | `--check-only` | off | send no step; read back and ask the questions only. A step the progress file does not record as delivered with a matching reply is `not delivered` and the result is not ok. No `--yes` needed; not with `--redo` |
 
 Each step is one message (it can attach files, see the plan's `attach`: absolute paths or `{"path": …, "sha256": …}`; the sha256 is computed again before sending and a mismatch stops the run before anything is sent) with a nonce, written to the ledger before it leaves and confirmed by read-back, like `ask`. Progress is kept in `TRINITY_HOME/migrations/<plan id>.json`: when a run stops (timeout, expired login, Ctrl-C), run the same command again. Replied steps are skipped, and a step whose delivery is unknown is first looked up in the chat and not resent when it is there. Replies are checked against `expectReply` on every run, so a reply that missed stays a miss. A progress file that cannot be read, or another migrate already running the same plan, stops the run before anything is sent; so does a step whose text changed after it was sent (send the new text with `--redo STEP`). The acceptance questions go to a new side chat (the `created` id muse-web-cli `chats --create` reports), and only that chat is deleted afterwards; if it cannot be opened, the questions are not asked and fail. Muse is one agent with shared memory but many chats: when the plan has `chat`, the api backend opens (or reuses) a side chat with that title, every step goes there, and the switched chat is set back to main afterwards; without the api backend the open chat is used and the result says so. A dot account has one inbox, so steps go there. Afterwards Muse's Memory.md is checked for the plan's keywords (a required read-back that cannot be read fails); a dot's memory cannot be read, so the acceptance questions are the read-back. Exit 0 means delivered, read back and accepted; 1 means not finished (see `stopped`); 2 is usage or no confirmation.
+
+migrate needs these seat-tool features: muse-web-cli `chats --create` reporting the `created` id, `send --attach` and `--attach-sha256`, and chatgpt-dot-cli `send --attach` and `--attach-sha256`. They ship in the next release of each tool; the versions pinned above do not have them yet.
 
 ```bash
 trinity-cli migrate muse ~/.grok-bot-cli/migrations/example.muse-plan.json --yes

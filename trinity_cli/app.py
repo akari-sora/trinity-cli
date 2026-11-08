@@ -225,7 +225,7 @@ def ask_one(
     timeout: float,
     poll: float,
     now=now_utc,
-    attach: list[str] | None = None,
+    attach: list[dict] | None = None,
 ) -> AskRow:
     label = seat.label if target is None else f"{seat.label}/{target}"
     if not seat.supports("send"):

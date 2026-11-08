@@ -499,7 +499,7 @@ class MuseSeat(Seat):
 
         return self._guard(run)
 
-    def send(self, target: str | None, text: str, nonce: str, attach: list[str] | None = None) -> Result:
+    def send(self, target: str | None, text: str, nonce: str, attach: list[dict] | None = None) -> Result:
         session = target if target and target.startswith(CHAT_PREFIX) else None
         if not session:
             try:
@@ -511,7 +511,7 @@ class MuseSeat(Seat):
         body = with_nonce(text, nonce)
         try:
             # Files are uploaded through the Muse window (muse-web-cli send --attach); that takes longer.
-            files = [arg for path in attach or [] for arg in ("--attach", path)]
+            files = [arg for item in attach or [] for arg in ("--attach", item["path"], "--attach-sha256", item["sha256"])]
             limit = 600 if attach else 90
             if session:
                 proc, payload = self._invoke(["send", "--session", _session_id(session), *files, "--", body], timeout=limit, backend="api")

@@ -421,7 +421,7 @@ def _migrate(seat, plan: dict, *, path: Path, ledger: Ledger, timeout: float, po
                                    "attempts": record.get("attempts", 0) + 1, "at": _iso(now())}
             _save_state(path, state)
             row = ask_one(seat, target, step["text"], nonce, ask_id=ask_id, ledger=ledger, timeout=timeout, poll=poll, now=now,
-                          attach=[item["path"] for item in step.get("attach") or []] or None)
+                          attach=step.get("attach") or None)
             rec = state["steps"][sid]
             rec.update(state=row.state, send=row.send, readback=row.readback)
             if row.reply:

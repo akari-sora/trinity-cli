@@ -152,6 +152,9 @@ class MigrateTestCase(unittest.TestCase):
         self.assertTrue(result["ok"], result)
         sent = next(c for c in world.calls if c and c[0] == "send")
         self.assertEqual(sent[sent.index("--attach") + 1], str(bundle))
+        # The seat tool checks the bytes it uploads against the plan's sha256.
+        import hashlib
+        self.assertEqual(sent[sent.index("--attach-sha256") + 1], hashlib.sha256(b"PK one").hexdigest())
         # Same text, other bytes: the old reply does not count for the new file.
         bundle.write_bytes(b"PK two")
         with self.assertRaises(PlanError):
@@ -576,6 +579,7 @@ class MigrateTestCase(unittest.TestCase):
         self.assertTrue(result["ok"], result)
         sent = next(c for c in world.calls if c and c[0] == "send")
         self.assertEqual(sent[sent.index("--attach") + 1], str(bundle))
+        self.assertEqual(sent[sent.index("--attach-sha256") + 1], sha)
         # The plain path form names the same bytes, so the step is the one already sent.
         self.assertTrue(self.run_plan(world, step([str(bundle)]))["ok"])
         self.assertEqual(world.sends(), 1)
@@ -644,8 +648,9 @@ class DotAttachTests(unittest.TestCase):
         world = DotWorld()
         runner = FakeRunner(world)
         seat = DotSeat(runner, binary="chatgpt-dot-cli", hostnames=set(), clock=Clock(), sleep=lambda s: None)
-        result = seat.send(None, "unzip it", "n0nce", attach=["/abs/a.zip", "/abs/b.md"])
+        result = seat.send(None, "unzip it", "n0nce", attach=[{"path": "/abs/a.zip", "sha256": "a" * 64}, {"path": "/abs/b.md", "sha256": "b" * 64}])
         self.assertEqual(result.state, "ok", result)
         argv = next(c["argv"] for c in runner.calls if "send" in c["argv"])
         self.assertEqual([argv[i + 1] for i, a in enumerate(argv) if a == "--attach"], ["/abs/a.zip", "/abs/b.md"])
-        self.assertLess(argv.index("--attach"), argv.index("--"))
+        self.assertEqual([argv[i + 1] for i, a in enumerate(argv) if a == "--attach-sha256"], ["a" * 64, "b" * 64])
+        self.assertLess(argv.index("--attach-sha256"), argv.index("--"))
