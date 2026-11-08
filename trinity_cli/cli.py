@@ -138,6 +138,7 @@ def build_parser() -> argparse.ArgumentParser:
     migrate.add_argument("--poll", type=float, default=10.0, help="seconds between read-backs (default 10)")
     migrate.add_argument("--resend-unknown", action="store_true", help="resend a step whose earlier delivery could not be read back (default: stop)")
     migrate.add_argument("--no-questions", action="store_true", help="skip the acceptance questions (default: ask them)")
+    migrate.add_argument("--redo", default="", help="comma-separated step ids to send again although they were answered (default: none)")
 
     sub.add_parser(
         "status",
@@ -532,6 +533,7 @@ def main(
                 run_migrate_command(
                     seats, args.seat, args.plan, yes=args.yes, timeout=args.timeout, poll=args.poll,
                     resend_unknown=args.resend_unknown, questions=not args.no_questions, ledger=book, stdin=stdin or sys.stdin,
+                    redo=[part for part in args.redo.split(",") if part],
                 ),
                 out,
                 as_json,

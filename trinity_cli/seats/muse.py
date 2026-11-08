@@ -625,6 +625,21 @@ class MuseSeat(Seat):
 
         return self._guard(run)
 
+    def close_chat(self, target: str) -> Result:
+        """Delete a side chat opened by open_chat (never the main chat), then switch back to main."""
+        def run() -> Result:
+            sid = _session_id(target)
+            if not target.startswith(CHAT_PREFIX) or not sid:
+                return Result.ok(False)
+            self._session_payload(["chats", "--delete", sid])
+            try:
+                self._session_payload(["chats", "--switch", "main"])
+            except Problem:
+                pass
+            return Result.ok(True)
+
+        return self._guard(run)
+
     def memory(self) -> Result:
         def run() -> Result:
             payload = self._payload(["memory"])

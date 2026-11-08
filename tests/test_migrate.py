@@ -37,6 +37,10 @@ class SideChatMuse(ReplyingMuse):
         super().__init__(answers)
         self.side: dict[str, dict] = {}
         self.switched = "main"
+        self.deleted: list[str] = []
+        self.counter = 0
+        self.files: dict[str, str] = {}
+        self.interject = False
 
     def __call__(self, args, stdin):
         items = [a for a in args if a != "--autostart"]
@@ -46,11 +50,15 @@ class SideChatMuse(ReplyingMuse):
         if backend == "api" and command == "chats":
             self.calls.append(rest)
             if "--create" in rest:
-                sid = f"s{len(self.side) + 1}"
+                self.counter += 1
+                sid = f"s{self.counter}"
                 self.side[sid] = {"title": rest[rest.index("--title") + 1], "messages": []}
                 self.switched = sid
             if "--switch" in rest:
                 self.switched = rest[rest.index("--switch") + 1]
+            if "--delete" in rest:
+                self.deleted.append(rest[rest.index("--delete") + 1])
+                self.side.pop(rest[rest.index("--delete") + 1], None)
             chats = [{"title": None, "is_current": self.switched == "main", "kind": "main", "session_id": "main-id"}]
             chats += [{"title": c["title"], "is_current": self.switched == sid, "kind": "side", "session_id": sid} for sid, c in self.side.items()]
             return ok({"backend": "api", "state": "ok", "count": len(chats), "chats": chats, "error": None, "hint": None})
@@ -61,7 +69,11 @@ class SideChatMuse(ReplyingMuse):
             if command == "send":
                 text = rest[-1]
                 chat.append({"role": "user", "text": text, "presentation": False})
-                chat.append({"role": "assistant", "text": next((v for k, v in self.answers.items() if k in text), "ok"), "presentation": False})
+                if self.interject:
+                    chat.append({"role": "assistant", "text": "Security alert: a withdrawal happened.", "presentation": False})
+                # A fresh chat cannot see what was sent elsewhere: answers come from "files" only.
+                known = self.files if self.side[sid]["title"].endswith(tuple("0123456789")) else self.answers
+                chat.append({"role": "assistant", "text": next((v for k, v in known.items() if k in text), "ok"), "presentation": False})
                 return ok({"backend": "api", "state": "ok", "attempted": True, "sent": True, "text": text, "reply": None, "error": None, "hint": None})
             if command == "messages":
                 return ok({"backend": "api", "state": "ok", "name": "Muse", "lines": [], "messages": list(chat), "error": None, "hint": None})
@@ -175,6 +187,49 @@ class MigrateTestCase(unittest.TestCase):
         again = self.run_plan(world, plan(chat={"title": "Grok Bot · Deploy QA"}))
         self.assertTrue(again["ok"])
         self.assertEqual(list(world.side), ["s1"])
+
+    def test_questions_run_in_a_fresh_check_chat_that_is_deleted_afterwards(self):
+        world = SideChatMuse({"Moving": "saved intro", "Save:": "saved memory-1", "Who are you": "Deploy QA (from chat context)"})
+        world.files = {"Who are you": "I am Muse."}  # nothing durable was migrated
+        world.memory_text = "unrelated"
+        value = plan(chat={"title": "Grok Bot · Deploy QA"}, checkChat={"title": "Grok Bot · Deploy QA · check"},
+                     checks=[{"id": "memory", "kind": "memory", "contains": ["Deploy QA"], "informational": True}])
+        result = self.run_plan(world, value)
+        self.assertFalse(result["ok"], "an answer only the migration chat could give must not pass")
+        self.assertTrue(result["questions"][0]["fresh_chat"])
+        self.assertIsNone(result["checks"][0]["ok"])
+        self.assertEqual(world.deleted, ["s2"])
+        self.assertEqual(list(world.side), ["s1"])
+        self.assertEqual(world.switched, "main")
+        world.files = {"Who are you": "Deploy QA, files in ~/grok-bot/Deploy-QA"}
+        again = self.run_plan(world, value)
+        self.assertTrue(again["ok"], again)
+
+    def test_an_unrelated_agent_message_is_not_taken_as_the_reply(self):
+        world = SideChatMuse({"Moving": "saved intro", "Save:": "saved memory-1"})
+        world.files = {"Who are you": "Q1: Deploy QA"}
+        world.interject = True
+        value = plan(chat={"title": "Grok Bot · Deploy QA"}, checkChat={"title": "Grok Bot · Deploy QA · check"}, checks=[],
+                     questions=[{"area": "role", "text": "Who are you now? Start your reply with Q1:", "expect": ["Deploy QA"], "marker": "Q1:"}])
+        result = self.run_plan(world, value)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["steps"][0]["reply"], "saved intro")
+        self.assertIn("Q1: Deploy QA", result["questions"][0]["answer"])
+
+    def test_redo_resends_only_the_named_steps(self):
+        world = ReplyingMuse({"Moving": "saved intro", "Save:": "saved memory-1", "Who are you": "Deploy QA"})
+        world.memory_text = "resume-skills telltale"
+        self.assertTrue(self.run_plan(world, plan())["ok"])
+        before = world.sends()
+        again = self.run_plan(world, plan(), redo=["memory-1"], questions=False)
+        self.assertTrue(again["ok"], again)
+        self.assertEqual(world.sends() - before, 1)
+        with self.assertRaises(PlanError):
+            self.run_plan(world, plan(), redo=["nope"])
+
+    def test_keyword_matching_ignores_case_spaces_and_hyphens(self):
+        from trinity_cli.migrate import _hits
+        self.assertEqual(_hits("will Squash Merge it", ["squash-merge", "!65"]), ["squash-merge"])
 
     def test_cli_refuses_to_send_without_yes_when_not_a_terminal(self):
         world = ReplyingMuse({})
