@@ -52,6 +52,16 @@ class DocsDriftTests(unittest.TestCase):
             self.assertIn(name, README, name)
             self.assertIn(name, SKILL, name)
 
+    def test_wait_help_names_the_default_grok_seat(self):
+        wait = _commands(build_parser())["wait"]
+        spec = next(action for action in wait._actions if action.dest == "spec")
+        self.assertIn("default Grok seat", spec.help or "")
+        self.assertNotIn("grok_bot", spec.help or "")
+        self.assertNotIn("單獨 `grok` 用 `grok_bot`", README)
+        self.assertNotIn("bare `grok` uses `grok_bot`", README)
+        self.assertIn("`grok`（預設座位）", README)
+        self.assertIn("`grok` (the default Grok seat)", README)
+
     def test_help_examples_include_the_common_flows(self):
         text = build_parser().format_help()
         for snippet in ("status", "digest", "ask all", "hand ", "wait ", "schedules", "who ", "brief ", "log ", "login "):
