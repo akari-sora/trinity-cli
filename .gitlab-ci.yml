@@ -239,7 +239,7 @@ release:
           "- macOS: local development and live checks.",
           "",
           "## Install",
-          "- macOS and Linux: uv or pipx. chatgpt-dot-cli v0.2.3, muse-web-cli v0.1.5, trinity-cli v0.4.6. gbot: download grok-bot-cli-0.11.2.tgz from the v0.11.2-iml1s.2 release and npm install -g that file. Node.js 22.19.0+. Commands are in the README.",
+          "- macOS and Linux: uv or pipx. chatgpt-dot-cli v0.2.6, muse-web-cli v0.1.6, trinity-cli v0.5.0. gbot: download grok-bot-cli-0.11.2.tgz from the v0.11.2-iml1s.7 release and npm install -g that file. Node.js 22.19.0+. Commands are in the README.",
           "- Windows (PowerShell): irm https://astral.sh/uv/install.ps1 | iex, then the same uv pins. gbot: the same .tgz, then npm install -g .\\grok-bot-cli-0.11.2.tgz. Node.js 22.19.0+.",
           "",
           "## Related projects",

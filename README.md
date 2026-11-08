@@ -41,19 +41,19 @@
 
 ### 安裝
 
-v0.4.6 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下：應印出 `muse-web-cli 0.1.5`、`trinity-cli 0.4.6`、`gbot 0.11.2`。舊的 muse-web-cli v0.1.2 沒有 `credential` 和 api gateway；v0.1.3 的 `send --wait` 在長聊天室會等不到回覆；v0.1.4 認不得 Muse 現在的側欄式介面，browser backend 會回 `ui_changed`。
+v0.5.0 釘這些版本。三個座位工具和 trinity 都裝好後，用 `--version` 對一下：應印出 `muse-web-cli 0.1.6`、`trinity-cli 0.5.0`、`gbot 0.11.2`。舊的 muse-web-cli v0.1.2 沒有 `credential` 和 api gateway；v0.1.3 的 `send --wait` 在長聊天室會等不到回覆；v0.1.4 認不得 Muse 現在的側欄式介面，browser backend 會回 `ui_changed`。
 
 macOS 與 Linux 需要 Python 3.11+、git、以及已在 PATH 上的 `uv`。Grok 還要 Node.js 22.19.0+ 和 npm。uv 的執行檔在 `~/.local/bin`；`--version` 找不到時把那個目錄加進 PATH。第一次 `uv tool install` 可能會下載 Python。
 
-不要用 `npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...`。那一行會結束碼 0，但 `gbot` 是斷掉的連結。下面的 `grok-bot-cli-0.11.2.tgz` 是 grok-bot-cli tag `v0.11.2-iml1s.2` 附的套件檔，trinity-cli 的版本釘選是另一個。改裝那個 tag 附的套件檔：
+不要用 `npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...`。那一行會結束碼 0，但 `gbot` 是斷掉的連結。下面的 `grok-bot-cli-0.11.2.tgz` 是 grok-bot-cli tag `v0.11.2-iml1s.7` 附的套件檔，trinity-cli 的版本釘選是另一個。改裝那個 tag 附的套件檔：
 
 ```bash
-uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.3"
-curl -fsSL -o grok-bot-cli-0.11.2.tgz "https://gitlab.com/-/project/86401528/uploads/95fd5079c4507af7f3f8e61dd04ce6f3/grok-bot-cli-0.11.2.tgz"
+uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.6"
+curl -fsSL -o grok-bot-cli-0.11.2.tgz "https://gitlab.com/-/project/86401528/uploads/3562acc9b72ba4f1f433acbb01d58c08/grok-bot-cli-0.11.2.tgz"
 npm install -g ./grok-bot-cli-0.11.2.tgz
 rm -f grok-bot-cli-0.11.2.tgz
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.6"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.0"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -66,13 +66,13 @@ Windows（PowerShell，同樣的釘選）：
 
 ```powershell
 irm https://astral.sh/uv/install.ps1 | iex
-uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.3"
-irm "https://gitlab.com/-/project/86401528/uploads/95fd5079c4507af7f3f8e61dd04ce6f3/grok-bot-cli-0.11.2.tgz" -OutFile grok-bot-cli-0.11.2.tgz
+uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.6"
+irm "https://gitlab.com/-/project/86401528/uploads/3562acc9b72ba4f1f433acbb01d58c08/grok-bot-cli-0.11.2.tgz" -OutFile grok-bot-cli-0.11.2.tgz
 npm install -g .\grok-bot-cli-0.11.2.tgz
 Remove-Item grok-bot-cli-0.11.2.tgz
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.6"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.0"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -271,6 +271,31 @@ trinity-cli log --seat dot --since 2h --limit 20
 
 `--json`：`records`（帳本上的欄位，不含內部 id）。
 
+`migrate 座位 計畫檔` 把別的工具寫好的搬家計畫（`trinity-migration-plan` v1，例如 `gbot migrate import --to muse`）送進 Muse 或 Your dot，再讀回、再問驗收題。座位只能是 `muse` 或 `dot`。
+
+| 旗標或參數 | 預設 | 範圍 |
+| --- | --- | --- |
+| `座位` | 必填 | `muse`、`dot` |
+| `計畫檔` | 必填 | JSON 計畫；多出來的欄位會被拒絕 |
+| `--yes` | 關 | 不問直接送；不是終端機時一定要加，否則不送 |
+| `--timeout` | 300 | 每一步等回覆的秒數；逾時不重送 |
+| `--poll` | 10 | 讀回間隔秒數 |
+| `--resend-unknown` | 關 | 上次送出後讀回看不到的那一步，才准重送 |
+| `--no-questions` | 關 | 只送與讀回，不問驗收題 |
+| `--redo` | 無 | 逗號分隔的步驟 id：已回覆也重送 |
+| `--min-interval` | 20 | 兩次送出之間至少隔幾秒，照人用 app 的節奏；每則都等到回覆才送下一則。對方回「太頻繁」（429、rate limit）就停下不重送，之後再跑同一行會從那一步接著做；若是某一步的回覆說太頻繁，下一步不送，要加 `--redo 步驟` 才會重送那一步。上次送出的時間記在進度檔，下一次執行也照這個間隔。驗收題送不出去（沒送出、太頻繁、逾時）就停，後面的題目不問 |
+| `--check-only` | 關 | 一步都不送，只讀回、問驗收題；進度檔裡沒有送達且回覆對的步驟算 `not delivered`，結果不算過；不必加 `--yes`，不能加 `--redo` |
+
+每一步是一則訊息（可以附檔，見計畫的 `attach`：絕對路徑，或 `{"path": …, "sha256": …}`；送出前重算 sha256，和計畫不符就停下不送），跟 `ask` 一樣有 nonce、先寫 ledger 再送、讀回確認。進度存在 `TRINITY_HOME/migrations/<計畫 id>.json`：中途停了（逾時、登入失效、Ctrl-C）就再跑同一行，已回覆的步驟會跳過，送出狀態不明的步驟先讀回聊天室，看得到就不重送。回覆每次都重新比對 `expectReply`，上次沒對上的這次也不會算過。進度檔壞掉、或同一份計畫已有另一個 migrate 在跑，就停下來不送；送出後計畫裡那一步的內容改了，也會停，要送新內容就加 `--redo 步驟`。驗收題每次都開一個新的副聊天室（認 muse-web-cli `chats --create` 回報的 `created` id），最後只刪它；開不成就不問，驗收算沒過。Muse 只有一個 agent、記憶共用，但可以有很多聊天室：計畫有 `chat` 時，會用 api 後端開（或沿用）同名副聊天室，所有步驟都送在那裡，做完把切換狀態改回主聊天室；api 後端不能用時改用目前開著的聊天室，並在結果註明。dot 一個帳號只有一個收件匣，步驟都送在那裡。送完後：Muse 讀 Memory.md 比對關鍵字（不是「僅供參考」的讀回讀不到就算沒過）；dot 的記憶讀不到，驗收題就是讀回。結束碼 0 表示全部送達、讀回與驗收都過；1 表示還沒完成（看 `stopped`）；2 是參數或沒有確認。
+
+migrate 需要的座位工具功能：muse-web-cli 的 `chats --create` 回報 `created` id、`send --attach` 與 `--attach-sha256`，以及 chatgpt-dot-cli 的 `send --attach` 與 `--attach-sha256`。muse-web-cli v0.1.6 與 chatgpt-dot-cli v0.2.6 起都有（上面釘的就是這兩版）。
+
+```bash
+trinity-cli migrate muse ~/.grok-bot-cli/migrations/example.muse-plan.json --yes
+```
+
+`--json`：`plan_id`、`seat`、`ok`、`stopped`、`state_path`、`chat`、`chat_note`、`steps[]`（`id`、`state`、`ok`、`note`、`nonce`、`reply`）、`checks[]`、`questions[]`。
+
 `login 座位` 不印憑證。
 
 | 旗標或參數 | 預設 | 範圍 |
@@ -430,19 +455,19 @@ Supported systems: see [Platforms](#platforms).
 
 ### Install
 
-v0.4.6 pins these versions. After installing trinity and each seat tool, check every `--version`: expect `muse-web-cli 0.1.5`, `trinity-cli 0.4.6`, and `gbot 0.11.2`. The older muse-web-cli v0.1.2 has no `credential` and no api gateway; v0.1.3's `send --wait` can miss the reply in a long chat; v0.1.4 does not recognize Muse's current sidebar shell, so the browser backend reports `ui_changed`.
+v0.5.0 pins these versions. After installing trinity and each seat tool, check every `--version`: expect `muse-web-cli 0.1.6`, `trinity-cli 0.5.0`, and `gbot 0.11.2`. The older muse-web-cli v0.1.2 has no `credential` and no api gateway; v0.1.3's `send --wait` can miss the reply in a long chat; v0.1.4 does not recognize Muse's current sidebar shell, so the browser backend reports `ui_changed`.
 
 macOS and Linux need Python 3.11+, git, and `uv` on `PATH`. Grok also needs Node.js 22.19.0+ and npm. uv installs commands under `~/.local/bin`; add that directory to `PATH` when `--version` cannot find them. The first `uv tool install` may download a Python.
 
-Do not run `npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...`. That command exits 0 and leaves a dangling `gbot`. The `grok-bot-cli-0.11.2.tgz` below is the package file from grok-bot-cli tag `v0.11.2-iml1s.2`. The trinity-cli version pin is separate. Install the package file attached to that tag:
+Do not run `npm install -g git+https://gitlab.com/aa22396584/grok-bot-cli.git#...`. That command exits 0 and leaves a dangling `gbot`. The `grok-bot-cli-0.11.2.tgz` below is the package file from grok-bot-cli tag `v0.11.2-iml1s.7`. The trinity-cli version pin is separate. Install the package file attached to that tag:
 
 ```bash
-uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.3"
-curl -fsSL -o grok-bot-cli-0.11.2.tgz "https://gitlab.com/-/project/86401528/uploads/95fd5079c4507af7f3f8e61dd04ce6f3/grok-bot-cli-0.11.2.tgz"
+uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.6"
+curl -fsSL -o grok-bot-cli-0.11.2.tgz "https://gitlab.com/-/project/86401528/uploads/3562acc9b72ba4f1f433acbb01d58c08/grok-bot-cli-0.11.2.tgz"
 npm install -g ./grok-bot-cli-0.11.2.tgz
 rm -f grok-bot-cli-0.11.2.tgz
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.6"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.0"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -455,13 +480,13 @@ Windows (PowerShell, same pins):
 
 ```powershell
 irm https://astral.sh/uv/install.ps1 | iex
-uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.3"
-irm "https://gitlab.com/-/project/86401528/uploads/95fd5079c4507af7f3f8e61dd04ce6f3/grok-bot-cli-0.11.2.tgz" -OutFile grok-bot-cli-0.11.2.tgz
+uv tool install "git+https://gitlab.com/aa22396584/chatgpt-dot-cli.git@v0.2.6"
+irm "https://gitlab.com/-/project/86401528/uploads/3562acc9b72ba4f1f433acbb01d58c08/grok-bot-cli-0.11.2.tgz" -OutFile grok-bot-cli-0.11.2.tgz
 npm install -g .\grok-bot-cli-0.11.2.tgz
 Remove-Item grok-bot-cli-0.11.2.tgz
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
-uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.4.6"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+uv tool install "git+https://gitlab.com/aa22396584/trinity-cli.git@v0.5.0"
 chatgpt-dot-cli --version
 gbot --version
 muse-web-cli --version
@@ -659,6 +684,31 @@ trinity-cli log --seat dot --since 2h --limit 20
 ```
 
 `--json`: `records` (ledger fields, without internal ids).
+
+`migrate SEAT PLAN` delivers a migration plan written by another tool (`trinity-migration-plan` v1, for example from `gbot migrate import --to muse`) to Muse or Your dot, reads it back, then asks acceptance questions. SEAT is `muse` or `dot`.
+
+| Flag or argument | Default | Range |
+| --- | --- | --- |
+| `SEAT` | required | `muse`, `dot` |
+| `PLAN` | required | JSON plan; unknown fields are refused |
+| `--yes` | off | send without asking; required when stdin is not a terminal |
+| `--timeout` | 300 | seconds to wait for each reply; a timeout never resends |
+| `--poll` | 10 | seconds between read-backs |
+| `--resend-unknown` | off | allow resending a step whose earlier send could not be read back |
+| `--no-questions` | off | deliver and read back only |
+| `--redo` | none | comma-separated step ids to send again although they were answered |
+| `--min-interval` | 20 | seconds between two sends, at the pace of a person using the app; every message waits for its reply first. A rate-limit answer (429, "too many") stops the run without resending; run the same line later to continue from that step. When a step's reply says so, the next step is not sent and that step is resent only with `--redo STEP`. The time of the last send is kept in the progress file, so the gap also holds across runs. A question that cannot be sent (not sent, rate limit, timeout) stops the remaining questions |
+| `--check-only` | off | send no step; read back and ask the questions only. A step the progress file does not record as delivered with a matching reply is `not delivered` and the result is not ok. No `--yes` needed; not with `--redo` |
+
+Each step is one message (it can attach files, see the plan's `attach`: absolute paths or `{"path": …, "sha256": …}`; the sha256 is computed again before sending and a mismatch stops the run before anything is sent) with a nonce, written to the ledger before it leaves and confirmed by read-back, like `ask`. Progress is kept in `TRINITY_HOME/migrations/<plan id>.json`: when a run stops (timeout, expired login, Ctrl-C), run the same command again. Replied steps are skipped, and a step whose delivery is unknown is first looked up in the chat and not resent when it is there. Replies are checked against `expectReply` on every run, so a reply that missed stays a miss. A progress file that cannot be read, or another migrate already running the same plan, stops the run before anything is sent; so does a step whose text changed after it was sent (send the new text with `--redo STEP`). The acceptance questions go to a new side chat (the `created` id muse-web-cli `chats --create` reports), and only that chat is deleted afterwards; if it cannot be opened, the questions are not asked and fail. Muse is one agent with shared memory but many chats: when the plan has `chat`, the api backend opens (or reuses) a side chat with that title, every step goes there, and the switched chat is set back to main afterwards; without the api backend the open chat is used and the result says so. A dot account has one inbox, so steps go there. Afterwards Muse's Memory.md is checked for the plan's keywords (a required read-back that cannot be read fails); a dot's memory cannot be read, so the acceptance questions are the read-back. Exit 0 means delivered, read back and accepted; 1 means not finished (see `stopped`); 2 is usage or no confirmation.
+
+migrate needs these seat-tool features: muse-web-cli `chats --create` reporting the `created` id, `send --attach` and `--attach-sha256`, and chatgpt-dot-cli `send --attach` and `--attach-sha256`. muse-web-cli v0.1.6 and chatgpt-dot-cli v0.2.6 (the versions pinned above) have them.
+
+```bash
+trinity-cli migrate muse ~/.grok-bot-cli/migrations/example.muse-plan.json --yes
+```
+
+`--json`: `plan_id`, `seat`, `ok`, `stopped`, `state_path`, `chat`, `chat_note`, `steps[]` (`id`, `state`, `ok`, `note`, `nonce`, `reply`), `checks[]`, `questions[]`.
 
 `login SEAT` does not print a credential.
 

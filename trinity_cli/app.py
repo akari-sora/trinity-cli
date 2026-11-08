@@ -225,6 +225,7 @@ def ask_one(
     timeout: float,
     poll: float,
     now=now_utc,
+    attach: list[dict] | None = None,
 ) -> AskRow:
     label = seat.label if target is None else f"{seat.label}/{target}"
     if not seat.supports("send"):
@@ -232,7 +233,7 @@ def ask_one(
         return AskRow(seat, label, UNSUPPORTED, error=reason.error or seat.unsupported_reason, nonce=nonce)
     base = {"ask_id": ask_id, "seat": seat.key, "target": label, "nonce": nonce}
     ledger.append({**base, "event": "sending", "at": iso(now())})
-    sent = call(seat, "send", target, text, nonce)
+    sent = call(seat, "send", target, text, nonce, attach=attach) if attach else call(seat, "send", target, text, nonce)
     if sent.state == UNSUPPORTED:
         ledger.append({**base, "event": "unsupported", "error": sent.error, "at": iso(now())})
         return AskRow(seat, label, UNSUPPORTED, error=sent.error, nonce=nonce)

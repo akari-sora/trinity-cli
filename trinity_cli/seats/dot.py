@@ -371,7 +371,7 @@ class DotSeat(Seat):
 
     # --- send / wait ----------------------------------------------------
 
-    def send(self, target: str | None, text: str, nonce: str) -> Result:
+    def send(self, target: str | None, text: str, nonce: str, attach: list[dict] | None = None) -> Result:
         if not self.binary:
             return Result.failed("找不到 chatgpt-dot-cli", FIX_INSTALL)
         body = with_nonce(text, nonce)
@@ -380,9 +380,12 @@ class DotSeat(Seat):
         argv = [self.binary, "--json", "send"]
         if self.dot_id:
             argv += ["--dot-id", self.dot_id]
+        for item in attach or []:
+            argv += ["--attach", item["path"], "--attach-sha256", item["sha256"]]
         argv += ["--", body]
         sent_at = self.now()
-        proc = self.runner.run(argv, timeout=90)
+        # An upload takes longer than a text message.
+        proc = self.runner.run(argv, timeout=600 if attach else 90)
         if proc.code in (2, 127) and not proc.timed_out:
             error = "找不到 chatgpt-dot-cli" if proc.code == 127 else "ChatGPT 登入檔不能用"
             return Result.failed(f"{error}，沒有送出", FIX_INSTALL if proc.code == 127 else FIX_LOGIN)
