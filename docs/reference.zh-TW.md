@@ -241,7 +241,7 @@ trinity-cli log --seat dot --since 2h --limit 20
 
 每一步是一則訊息（可以附檔，見計畫的 `attach`：絕對路徑，或 `{"path": …, "sha256": …}`；送出前重算 sha256，和計畫不符就停下不送），跟 `ask` 一樣有 nonce、先寫 ledger 再送、讀回確認。進度存在 `TRINITY_HOME/migrations/<計畫 id>.json`：中途停了（逾時、登入失效、Ctrl-C）就再跑同一行，已回覆的步驟會跳過，送出狀態不明的步驟先讀回聊天室，看得到就不重送。回覆每次都重新比對 `expectReply`，上次沒對上的這次也不會算過。進度檔壞掉、或同一份計畫已有另一個 migrate 在跑，就停下來不送；送出後計畫裡那一步的內容改了，也會停，要送新內容就加 `--redo 步驟`。驗收題每次都開一個新的副聊天室（認 muse-web-cli `chats --create` 回報的 `created` id），最後只刪它；開不成就不問，驗收算沒過。Muse 只有一個 agent、記憶共用，但可以有很多聊天室：計畫有 `chat` 時，會用 api 後端開（或沿用）同名副聊天室，所有步驟都送在那裡，做完把切換狀態改回主聊天室；api 後端不能用時改用目前開著的聊天室，並在結果註明。dot 一個帳號只有一個收件匣，步驟都送在那裡。送完後：Muse 讀 Memory.md 比對關鍵字（不是「僅供參考」的讀回讀不到就算沒過）；dot 的記憶讀不到，驗收題就是讀回。結束碼 0 表示全部送達、讀回與驗收都過；1 表示還沒完成（看 `stopped`）；2 是參數或沒有確認。
 
-migrate 需要的座位工具功能：muse-web-cli 的 `chats --create` 回報 `created` id、`send --attach` 與 `--attach-sha256`，以及 chatgpt-dot-cli 的 `send --attach` 與 `--attach-sha256`。muse-web-cli v0.1.6 與 chatgpt-dot-cli v0.2.6 起都有（README 釘的就是這兩版）。
+migrate 需要的座位工具功能：muse-web-cli 的 `chats --create` 回報 `created` id、`send --attach` 與 `--attach-sha256`，以及 chatgpt-dot-cli 的 `send --attach` 與 `--attach-sha256`。muse-web-cli v0.1.7 與 chatgpt-dot-cli v0.2.6 起都有（README 釘的就是這兩版）。
 
 ```bash
 trinity-cli migrate muse ~/.grok-bot-cli/migrations/example.muse-plan.json --yes

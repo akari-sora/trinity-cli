@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.3 - 2026-11-09
+
+- 釘選 muse-web-cli v0.1.7（Muse 拿掉「近期」分頁後，`upcoming` 改從「動態」分頁讀排定任務；`trinity-cli schedules` 和搬家時的排程讀回又能用瀏覽器模式）與 grok-bot-cli v0.11.2-iml1s.14。
+- gbot 的安裝改成一行 `npm install -g <release 連結>`，macOS、Linux、Windows 都一樣。程式沒有改。
+
 ## 0.5.2 - 2026-11-08
 
 - `migrate` 的驗收題：對方分好幾則回答時（例如 Your dot 先回「Q3：我正在讀檔案，稍後列出」，再回真正的答案），會把同一題、帶同樣標記的後續訊息讀完再判斷，等到答案出現或對方 3 分鐘沒再說話為止；不會再問一次。以前只看第一則帶標記的訊息，會把這種回答誤判成答錯。
